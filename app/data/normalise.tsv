@@ -1,0 +1,17 @@
+# Spelling normalisation used when comparing texts with Cantus Index.
+#
+# Both texts are normalised the same way, so a rule only has to make two
+# spellings equal, not choose the right one. Each line is a Python regular
+# expression and its replacement, separated by a tab. Rules apply in order, to
+# lower-case text with accents removed. Lines starting with # are ignored.
+#
+# Add rules here as new spelling habits turn up.
+
+j	i
+v	u
+y	i
+ae	e
+oe	e
+c(?=i[aeiou])	t
+\bmichi\b	mihi
+\bnichil	nihil

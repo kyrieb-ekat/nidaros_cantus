@@ -80,7 +80,7 @@ def test_derived_mismatch_rolls_back(conn, tmp_path):
         import_workbook(conn, write_workbook(tmp_path / "bad.xlsx", rows), "brev")
     assert count(conn, "SELECT COUNT(*) FROM line") == 0
     assert count(conn, "SELECT COUNT(*) FROM import_batch") == 0
-    assert count(conn, "SELECT COUNT(*) FROM flag_type") == 0
+    assert count(conn, "SELECT COUNT(*) FROM flag_type WHERE code NOT LIKE 'CI!_%' ESCAPE '!'") == 0
 
 
 def test_same_file_twice_is_refused(conn, tmp_path):

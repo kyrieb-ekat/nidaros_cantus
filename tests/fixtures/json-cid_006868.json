@@ -1,0 +1,73 @@
+{
+  "info": {
+    "field_ah_item": null,
+    "field_ah_volume": null,
+    "field_cao": "6868",
+    "field_cao_concordances": "C BEMVHRDFSL",
+    "field_ct_page_number": null,
+    "field_ct_volume": null,
+    "field_feast": "Andreae",
+    "field_full_text": "Homo dei ducebatur ut crucifigerent eum populus autem clamabat voce magna dicens innocens ejus sanguis sine causa damnatur",
+    "field_fulltext_source": null,
+    "field_genre": "R",
+    "field_incipit": "Homo dei ducebatur ut crucifigerent eum populus autem clamabat voce magna dicens innocens ejus sanguis sine causa damnatur",
+    "field_language": null,
+    "field_notes": null,
+    "field_proofread_suggestions": null,
+    "field_related_chant_id": null,
+    "field_similar_chant_id": null,
+    "field_tags": null,
+    "field_troped_chant_id": null
+  },
+  "databases": {
+    "CD": {"count": 100, "name": "Cantus Database", "url": "https://cantusdatabase.org", "url_cid": "https://cantusdatabase.org/id/006868", "last_update": "32 hours 47 minutes ago"},
+    "SEMM": {"count": 16, "name": "Spanish Early Music Manuscripts", "url": "https://musicahispanica.eu", "url_cid": "https://musicahispanica.eu/id/006868", "last_update": "68 hours 47 minutes ago"},
+    "FCB": {"count": 6, "name": "Fontes Cantus Bohemiae", "url": "https://cantusbohemiae.cz", "url_cid": "https://cantusbohemiae.cz/id/006868", "last_update": "27 minutes ago"},
+    "CSK": {"count": 5, "name": "Slovak Early Music Database", "url": "https://cantus.sk", "url_cid": "https://cantus.sk/id/006868", "last_update": "53 hours 57 minutes ago"},
+    "PEM": {"count": 4, "name": "Portuguese Early Music Database", "url": "https://pemdatabase.eu", "url_cid": "https://pemdatabase.eu/musical-items?cid=006868", "last_update": "13 hours 17 minutes ago"},
+    "CPL": {"count": 4, "name": "Cantus Planus in Polonia", "url": "https://cantus.ispan.pl", "url_cid": "https://cantus.ispan.pl/id/006868", "last_update": "63 hours 47 minutes ago"},
+    "MMMO": {"count": 2, "name": "Medieval Music Manuscripts Online", "url": "https://musmed.eu", "url_cid": "https://musmed.eu/id/006868", "last_update": "18 hours 27 minutes ago"},
+    "A4M": {"count": 1, "name": "Austrian Mediaeval Monastic Music Manuscripts", "url": "https://austriamanus.org", "url_cid": "https://austriamanus.org/id/006868", "last_update": "49 hours 7 minutes ago"},
+    "HCD": {"count": 1}
+  },
+  "chants": [
+    {
+      "siglum": "(Palma) C11",
+      "srclink": "https://musicahispanica.eu/source/151618",
+      "chantlink": "https://musicahispanica.eu/chant/152738",
+      "folio": "063v",
+      "sequence": "5",
+      "incipit": "Homo dei ducebatur ut crucifigerent eum",
+      "feast": "Andreae",
+      "office": "M",
+      "genre": "R",
+      "position": "2.1",
+      "image": "0",
+      "mode": "*",
+      "fulltext": "Homo dei ducebatur ut crucifigerent eum populus autem clamabat voce magna dicens innocens ejus sanguis sine causa damnatur",
+      "melody": "",
+      "melody_id": "",
+      "century": "18",
+      "db": "SEMM"
+    },
+    {
+      "siglum": "A-Gu 29 (olim 38/8 f.)",
+      "srclink": "https://cantusdatabase.org/source/123610",
+      "chantlink": "https://cantusdatabase.org/chant/245346",
+      "folio": "205r",
+      "sequence": "4",
+      "incipit": "Homo dei*",
+      "feast": "Andreae",
+      "office": "V",
+      "genre": "R",
+      "position": "",
+      "image": "https://unipub.uni-graz.at/obvugrscript/content/pageview/6705417",
+      "mode": "*",
+      "fulltext": "Homo dei*",
+      "melody": "",
+      "melody_id": "",
+      "century": null,
+      "db": "CD"
+    }
+  ]
+}
