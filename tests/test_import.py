@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import shutil
-import sqlite3
 
 import pytest
 
@@ -80,7 +79,7 @@ def test_derived_mismatch_rolls_back(conn, tmp_path):
         import_workbook(conn, write_workbook(tmp_path / "bad.xlsx", rows), "brev")
     assert count(conn, "SELECT COUNT(*) FROM line") == 0
     assert count(conn, "SELECT COUNT(*) FROM import_batch") == 0
-    assert count(conn, "SELECT COUNT(*) FROM flag_type WHERE code NOT LIKE 'CI!_%' ESCAPE '!'") == 0
+    assert count(conn, "SELECT COUNT(*) FROM flag_type WHERE code = 'NO_OFFICE'") == 0
 
 
 def test_same_file_twice_is_refused(conn, tmp_path):
@@ -172,7 +171,7 @@ def test_update_line_rejects_bad_values(conn, tmp_path):
     line_id = count(conn, "SELECT id FROM line WHERE origin_ref = 'master_seq 3'")
     with pytest.raises(db.DatabaseError):
         db.update_line(conn, line_id, "page_start", 99)
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(db.DatabaseError, match="not a known genre code"):
         db.update_line(conn, line_id, "genre", "XX")
     assert count(conn, "SELECT COUNT(*) FROM edit_log") == 0
     assert count(conn, "SELECT genre FROM line WHERE id = ?", line_id) == "A"

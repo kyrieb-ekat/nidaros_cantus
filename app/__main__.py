@@ -12,6 +12,11 @@ Cantus Index
   genre-map         set which Cantus Index genre codes match a local genre
   fetch             look up Cantus Index candidates for lines
 
+Correcting
+  edit              change one field of one or more lines
+  split-feast       move a line and the rest of its feast to a new (supplied) feast
+  flag              add, clear or reopen a flag on a line
+
 Reviewing
   status            counts per book
   show              one line with its text, flags, candidates and evidence
@@ -90,6 +95,28 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--offline", action="store_true", help="use only cached responses")
     p.add_argument("--interval", type=float, default=1.0, help="seconds between requests (default 1)")
     p.add_argument("--quiet", action="store_true", help="no per-line progress")
+
+    p = sub.add_parser("edit", help="change one field of one or more lines")
+    p.add_argument("lines", help="line id(s): 110, 110-119 or 110,112,115-117")
+    p.add_argument("field")
+    p.add_argument("value", nargs="?")
+    p.add_argument("--clear", action="store_true", help="empty the field")
+    p.add_argument("--note", help="why (kept in the edit log)")
+
+    p = sub.add_parser("split-feast", help="move lines to a new (supplied) feast")
+    p.add_argument("line_id", type=int, help="first line of the new feast")
+    p.add_argument("heading", help='the supplied heading, e.g. "[SANCTI ANDREE APOSTOLI]"')
+    p.add_argument("--note", help="note for the extra field (default: heading not printed; supplied)")
+    p.add_argument("--no-heading", action="store_true", help="do not insert a supplied heading line")
+
+    p = sub.add_parser("flag", help="add, clear or reopen a flag")
+    p.add_argument("line_id", type=int)
+    p.add_argument("code")
+    action = p.add_mutually_exclusive_group(required=True)
+    action.add_argument("--add", dest="action", action="store_const", const="add")
+    action.add_argument("--clear", dest="action", action="store_const", const="clear")
+    action.add_argument("--reopen", dest="action", action="store_const", const="reopen")
+    p.add_argument("--note")
 
     p = sub.add_parser("status", help="show counts")
     p.add_argument("--source", help="limit to one book")
@@ -308,6 +335,52 @@ def cmd_fetch(args) -> int:
 # --------------------------------------------------------------------------
 # Reviewing
 
+def _line_ids(text: str) -> list[int]:
+    ids: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        try:
+            if "-" in part:
+                a, b = (int(x) for x in part.split("-", 1))
+                if b < a:
+                    raise ValueError
+                ids.extend(range(a, b + 1))
+            elif part:
+                ids.append(int(part))
+        except ValueError:
+            raise db.DatabaseError(f"Cannot read line ids '{text}'.")
+    return ids
+
+
+def cmd_edit(args) -> int:
+    conn = db.connect(args.db)
+    if args.clear == (args.value is not None):
+        raise db.DatabaseError("Give a value, or --clear.")
+    value = db.parse_value(args.field, None if args.clear else args.value)
+    ids = _line_ids(args.lines)
+    changed = sum(db.update_line(conn, i, args.field, value, args.note) for i in ids)
+    print(f"{args.field}: changed {changed} of {len(ids)} line{'s' if len(ids) != 1 else ''}"
+          f"{' (the rest already had that value)' if changed < len(ids) else ''}.")
+    return 0
+
+
+def cmd_split_feast(args) -> int:
+    conn = db.connect(args.db)
+    moved, heading_id = db.split_feast(conn, args.line_id, args.heading, args.note,
+                                       heading=not args.no_heading)
+    print(f"Moved {moved} lines to '{args.heading}'"
+          f"{f'; supplied heading is line {heading_id}' if heading_id else ''}. "
+          "Map it with `python -m app map-feast`.")
+    return 0
+
+
+def cmd_flag(args) -> int:
+    conn = db.connect(args.db)
+    db.set_flag(conn, args.line_id, args.code, args.action, args.note)
+    print(f"line {args.line_id}: {args.code} {dict(add='added', clear='cleared', reopen='reopened')[args.action]}")
+    return 0
+
+
 def cmd_show(args) -> int:
     conn = db.connect(args.db)
     line = conn.execute("SELECT * FROM line_export WHERE id = ?", (args.line_id,)).fetchone()
@@ -321,6 +394,9 @@ def cmd_show(args) -> int:
           f"{line['row_type']}  genre {line['genre'] or '-'}  office {line['office'] or '-'}  "
           f"position {line['position'] or '-'}")
     print(f"feast: {line['feast']}{feast_note}")
+    if line["rubric"] or line["extra_note"]:
+        extra = " | ".join(x for x in (line["rubric"], line["extra_note"]) if x)
+        print(f"extra: {_short(extra, 160)}")
     text, is_cue = comparison_text(conn, line)
     print("standardized text:" + (" (cue only)" if is_cue else ""))
     print(_wrap(line["fulltext_standardized"]))
@@ -489,6 +565,9 @@ COMMANDS = {
     "map-feast": cmd_map_feast,
     "genre-map": cmd_genre_map,
     "fetch": cmd_fetch,
+    "edit": cmd_edit,
+    "split-feast": cmd_split_feast,
+    "flag": cmd_flag,
     "status": cmd_status,
     "show": cmd_show,
     "decide": cmd_decide,

@@ -37,6 +37,9 @@ DERIVED_COLUMNS = ("in_import", "import_seq", "position", "incipit")
 
 CID_COLUMNS = ("cid_proposed", "cid_candidate_text", "cid_decision")
 
+# Columns read when present (older workbooks lack them).
+OPTIONAL_COLUMNS = ("extra_note",)
+
 REQUIRED_COLUMNS = (
     ("master_seq", "page_start", "page_end", "nocturn", "incipit_only",
      "xref_resolved_page", "review_flags")
@@ -260,7 +263,8 @@ def _insert_lines(conn, source_id: int, batch_id: int, rows: list[dict]) -> dict
     ids: dict[int, int] = {}
     page, n = None, 0
     columns = ("source_id", "batch_id", "origin_ref", "page_start", "line_on_page",
-               "page_end", "nocturn", "incipit_only", "xref_resolved_page") + LINE_TEXT_COLUMNS
+               "page_end", "nocturn", "incipit_only", "xref_resolved_page") \
+        + LINE_TEXT_COLUMNS + OPTIONAL_COLUMNS
     sql = (f"INSERT INTO line ({', '.join(columns)}) "
            f"VALUES ({', '.join('?' for _ in columns)})")
     for row in rows:
@@ -274,7 +278,7 @@ def _insert_lines(conn, source_id: int, batch_id: int, rows: list[dict]) -> dict
             _as_int(row["nocturn"], "nocturn", seq),
             _yes_flag(row["incipit_only"], "incipit_only", seq),
             None if resolved is None else str(resolved),
-        ) + tuple(row[c] for c in LINE_TEXT_COLUMNS)
+        ) + tuple(row[c] for c in LINE_TEXT_COLUMNS) + tuple(row.get(c) for c in OPTIONAL_COLUMNS)
         try:
             ids[seq] = conn.execute(sql, values).lastrowid
         except sqlite3.IntegrityError as exc:

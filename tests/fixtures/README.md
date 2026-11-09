@@ -9,3 +9,7 @@ concordance records, so code reading it must report the evidence as incomplete.
 fields; the feast codes and dates are illustrative only.
 
 Tests serve these with a UTF-8 byte-order mark in front, as Cantus Index does.
+
+`synthetic_edition.html` is a made-up fragment in the markup of the Nasjonalbiblioteket
+edition (span.red rubrics, span.pageRef pages, paraCenter headings). It exercises the
+parser's vigil, Second Vespers and post-Second Vespers rules; the texts are illustrative.

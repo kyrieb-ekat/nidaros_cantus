@@ -48,6 +48,9 @@ def test_migration_keeps_data_and_matches_a_fresh_database(tmp_path):
     assert tuple(a.execute("SELECT status, cid FROM current_decision").fetchone()) == ("Confirm", "000002")
     assert a.execute("SELECT ci_genre FROM genre WHERE code = 'HV'").fetchone()[0] is None
     assert a.execute("SELECT COUNT(*) FROM flag_type WHERE code LIKE 'CI%'").fetchone()[0] == 4
+    assert a.execute("SELECT COUNT(*) FROM flag_type WHERE code IN "
+                     "('FEAST_SUPPLIED', 'OFFICE_V2_INFERRED')").fetchone()[0] == 2
+    assert "extra_note" in [c[1] for c in a.execute("PRAGMA table_info(line)")]
 
 
 def test_failed_migration_leaves_database_unchanged(tmp_path, monkeypatch):

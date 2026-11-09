@@ -16,6 +16,8 @@ Python 3.10 or later. In a fresh environment:
 pip install -r requirements.txt
 ```
 
+The parser in `pipeline/` also needs `beautifulsoup4` and `lxml`, which are included.
+
 ## Initialising the database
 
 From the repository root:
@@ -59,19 +61,41 @@ from the README sheet, and the connections between lines: responsory verse to re
 hymn stanza and refrain to hymn, and incipit-only item to the line holding its full text
 when that line is in the same workbook.
 
+## Correcting lines
+
+The database is where corrections are made. Every change is recorded in `edit_log`, and
+derived values (incipit, position, import order) follow automatically.
+
+```
+python -m app edit 110-119 office V2 --note "Second Vespers: follows the day hours"
+python -m app edit 46 extra_note "…"            # --clear empties a field
+python -m app flag 110 OFFICE_V_UNSPEC --clear   # --add, --clear, --reopen
+python -m app split-feast 12 "[SANCTI ANDREE APOSTOLI]"
+```
+
+`split-feast` moves a line and the rest of its feast's run (up to the next heading) to a new
+feast, for headings the edition does not print. It inserts a supplied heading line flagged
+`FEAST_SUPPLIED`, and gives each chant the note "Feast heading not printed in the edition;
+supplied" in `extra_note`, which goes into the import file's "extra" column after the rubric.
+The parser does the same when it reads the edition (see `pipeline/README.md`); the command is
+for lines already in the database. Map each new heading to its Cantus feast with `map-feast`.
+
 ## Looking up Cantus IDs
 
 The lookup uses the Cantus Index API, which covers Cantus Database and the other databases
 in the Cantus Index network in one request. Every response is cached in the database, so a
 lookup is only slow the first time; `--offline` re-ranks from the cache without the network.
 
-1. Map each feast heading to a Cantus Index feast. This is what lets concordances count as
-   evidence (same feast, same feast and office):
+1. Map each feast heading, printed or supplied, to its Cantus feast. Cantus Index and
+   Cantus Database share the feast list (same names and codes), and the mapped name is what
+   the import file will use. It is also what lets concordances count as evidence (same
+   feast, same feast and office):
 
    ```
    python -m app feasts                      # headings and their mapping
    python -m app feasts --search andre       # find the Cantus Index name
-   python -m app map-feast "IN UIGILIA SANCTI ANDREE APOSTOLI" --ci "Andreae"
+   python -m app map-feast "IN UIGILIA SANCTI ANDREE APOSTOLI" --ci "Vigilia Andreae"
+   python -m app map-feast "[SANCTI ANDREE APOSTOLI]" --ci "Andreae"
    python -m app map-feast "<heading>" --ci "<Cantus Index name>" --variant
    python -m app map-feast "<heading>" --unmapped
    ```
@@ -176,7 +200,7 @@ tests/            run without network access, using saved Cantus Index responses
 | `decision` | Confirm / Reject / Fixed / Variant / New CID; append-only, latest one counts |
 | `edit_log` | Every change made to a line after import |
 | `api_cache` | Cantus Index responses |
-| `feast_map` | Each feast heading's Cantus Index feast, and whether it is exact |
+| `feast_map` | Each feast heading's Cantus feast, and whether it is exact |
 | `genre`, `office` | Genre and service codes, with each genre's Cantus Index code |
 
 Book order is `(page_start, line_on_page)`. `line_on_page` is numbered in steps of 10 so

@@ -18,8 +18,12 @@ EDITABLE_FIELDS = frozenset({
     "nocturn", "slot", "genre", "sign", "fulltext_edition", "fulltext_ms",
     "fulltext_standardized", "rubric", "xref_raw", "xref_leaf",
     "incipit_only", "xref_resolved_page", "xref_resolved_text",
-    "repetendum_note", "variant_notes", "indexing_notes",
+    "repetendum_note", "variant_notes", "indexing_notes", "extra_note",
 })
+
+INTEGER_FIELDS = frozenset({"page_end", "nocturn", "incipit_only"})
+SUPPLIED_NOTE = "Feast heading not printed in the edition; supplied"
+
 
 DECISION_STATUSES = ("Confirm", "Reject", "Fixed", "Variant", "New CID")
 
@@ -148,13 +152,14 @@ def update_line(conn: sqlite3.Connection, line_id: int, field: str, value,
     old = row[0]
     if old == value:
         return False
-    with conn:
-        conn.execute(f"UPDATE line SET {field} = ? WHERE id = ?", (value, line_id))
-        conn.execute(
-            "INSERT INTO edit_log (line_id, field, old_value, new_value, note) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (line_id, field, _as_text(old), _as_text(value), note),
-        )
+    try:
+        with conn:
+            conn.execute(f"UPDATE line SET {field} = ? WHERE id = ?", (value, line_id))
+            _log(conn, line_id, field, old, value, note)
+    except sqlite3.IntegrityError as exc:
+        known = {"office": "office", "genre": "genre"}.get(field)
+        hint = f" ({value!r} is not a known {known} code)" if known else ""
+        raise DatabaseError(f"Line {line_id}: cannot set {field}{hint}.") from exc
     return True
 
 
@@ -187,6 +192,114 @@ def record_decision(conn: sqlite3.Connection, line_id: int, status: str,
             (line_id, status, cid, parent_cid, reason, note),
         )
     return cur.lastrowid
+
+
+def split_feast(conn: sqlite3.Connection, line_id: int, label: str,
+                note: str | None = None, heading: bool = True) -> tuple[int, int | None]:
+    """Move a line and the rest of its feast's run to a new (supplied) feast.
+
+    The run ends at the first following line with a different feast. Chant
+    lines get the note in extra_note, unless they already have another note
+    (a note left by an earlier split is replaced). With
+    heading=True a supplied heading line is inserted before the first line and
+    flagged FEAST_SUPPLIED, as the parser does. All in one transaction; every
+    change is logged. Returns (lines moved, id of the inserted heading).
+    """
+    label = (label or "").strip()
+    if not label:
+        raise DatabaseError("Give the new feast heading.")
+    first = conn.execute("SELECT * FROM line WHERE id = ?", (line_id,)).fetchone()
+    if first is None:
+        raise DatabaseError(f"No line with id {line_id}.")
+    if first["feast"] == label:
+        raise DatabaseError(f"Line {line_id} already has the feast '{label}'.")
+    note = note or SUPPLIED_NOTE
+
+    run = []
+    for row in conn.execute(
+            "SELECT id, feast, genre, extra_note FROM line WHERE source_id = ? "
+            "AND (page_start > ? OR (page_start = ? AND line_on_page >= ?)) "
+            "ORDER BY page_start, line_on_page",
+            (first["source_id"], first["page_start"], first["page_start"], first["line_on_page"])):
+        if row["feast"] != first["feast"]:
+            break
+        run.append(row)
+
+    heading_id = None
+    with conn:
+        if heading:
+            before = conn.execute(
+                "SELECT COALESCE(MAX(line_on_page), 0) FROM line WHERE source_id = ? "
+                "AND page_start = ? AND line_on_page < ?",
+                (first["source_id"], first["page_start"], first["line_on_page"])).fetchone()[0]
+            slot = (before + first["line_on_page"]) // 2
+            if slot <= before:
+                raise DatabaseError(f"No room to insert a heading before line {line_id}.")
+            heading_id = conn.execute(
+                "INSERT INTO line (source_id, batch_id, origin_ref, page_start, line_on_page, "
+                "row_type, content_structure, feast, extra_note) "
+                "VALUES (?, ?, 'supplied by split-feast', ?, ?, 'heading', ?, ?, ?)",
+                (first["source_id"], first["batch_id"], first["page_start"], slot,
+                 first["content_structure"], label, note)).lastrowid
+            conn.execute("INSERT INTO flag (line_id, code, ord, note) VALUES (?, 'FEAST_SUPPLIED', 1, ?)",
+                         (heading_id, note))
+            _log(conn, heading_id, "line", None, f"inserted supplied heading '{label}'", "split-feast")
+        for row in run:
+            conn.execute("UPDATE line SET feast = ? WHERE id = ?", (label, row["id"]))
+            _log(conn, row["id"], "feast", row["feast"], label, "split-feast")
+            if row["genre"] and row["extra_note"] != note and \
+                    (not row["extra_note"] or row["extra_note"].startswith(SUPPLIED_NOTE)):
+                conn.execute("UPDATE line SET extra_note = ? WHERE id = ?", (note, row["id"]))
+                _log(conn, row["id"], "extra_note", row["extra_note"], note, "split-feast")
+    return len(run), heading_id
+
+
+def set_flag(conn: sqlite3.Connection, line_id: int, code: str, action: str,
+             note: str | None = None) -> None:
+    """Add, clear or reopen one flag on a line."""
+    if conn.execute("SELECT 1 FROM line WHERE id = ?", (line_id,)).fetchone() is None:
+        raise DatabaseError(f"No line with id {line_id}.")
+    if conn.execute("SELECT 1 FROM flag_type WHERE code = ?", (code,)).fetchone() is None:
+        raise DatabaseError(f"Unknown flag '{code}'.")
+    existing = conn.execute("SELECT status FROM flag WHERE line_id = ? AND code = ?",
+                            (line_id, code)).fetchone()
+    with conn:
+        if action == "add":
+            if existing:
+                raise DatabaseError(f"Line {line_id} already has {code} ({existing['status']}).")
+            ord_ = conn.execute("SELECT COALESCE(MAX(ord), 0) + 1 FROM flag WHERE line_id = ?",
+                                (line_id,)).fetchone()[0]
+            conn.execute("INSERT INTO flag (line_id, code, ord, note) VALUES (?, ?, ?, ?)",
+                         (line_id, code, ord_, note))
+        elif action in ("clear", "reopen"):
+            if not existing:
+                raise DatabaseError(f"Line {line_id} has no {code} flag.")
+            cleared = action == "clear"
+            conn.execute(
+                "UPDATE flag SET status = ?, cleared_at = CASE WHEN ? THEN "
+                "strftime('%Y-%m-%dT%H:%M:%SZ', 'now') END, note = COALESCE(?, note) "
+                "WHERE line_id = ? AND code = ?",
+                ("cleared" if cleared else "open", cleared, note, line_id, code))
+        else:
+            raise DatabaseError(f"Unknown flag action '{action}'.")
+
+
+def parse_value(field: str, value: str | None):
+    """Convert command-line text to the stored type of a line field."""
+    if value is None:
+        return None
+    if field in INTEGER_FIELDS:
+        try:
+            return int(value)
+        except ValueError:
+            raise DatabaseError(f"{field} must be a whole number.")
+    return value
+
+
+def _log(conn, line_id, field, old, new, note) -> None:
+    conn.execute(
+        "INSERT INTO edit_log (line_id, field, old_value, new_value, note) VALUES (?, ?, ?, ?, ?)",
+        (line_id, field, _as_text(old), _as_text(new), note))
 
 
 def _as_text(value) -> str | None:
