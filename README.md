@@ -170,7 +170,8 @@ Hymnica, `ah51067:02` (hymn and stanza number). Both forms turn up as candidates
 
 Positions follow the Cantus Database rules (https://cantusdatabase.org/description/):
 psalm antiphons of Lauds and Vespers 1–5 (`p` for one antiphon for all psalms), canticle
-antiphons `M`, `B`, `N`, Matins `nocturn.place` (`1.2`) with versicles `1.`, verses `01`,
+antiphons `M`, `B`, `N`, Matins `nocturn.place` (`1.2`) with versicles `1.` (the versicle
+after the last responsory, closing Matins, is blank), verses `01`,
 memorials `R`, and blank for the only chant of its genre in a service. Hymn stanzas are
 numbered `02`, `03` … after the hymn, pending confirmation. A canticle antiphon is recognised
 by the psalm cue after it ("Psalmus Benedictus"), its slot, or its place after the hymn.

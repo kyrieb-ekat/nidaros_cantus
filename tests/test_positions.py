@@ -102,6 +102,25 @@ def test_matins(book):
     assert not any(checks)
 
 
+def test_versicle_closing_matins_is_blank(book):
+    n2 = [book.add("W", office="M", nocturn=2), book.add("R", office="M", nocturn=2)]
+    w3 = book.add("W", office="M", nocturn=3)
+    r3 = [book.add("R", office="M", nocturn=3) for _ in range(3)]
+    v3 = book.add("V", office="M", nocturn=3, link=("verse_of", r3[-1]))
+    closing = book.add("W", office="M", nocturn=3)
+    vals, checks = values(book, n2 + [w3] + r3 + [v3, closing])
+    assert vals == ["2.", "2.1", "3.", "3.1", "3.2", "3.3", "01", None]
+    assert not any(checks)
+
+
+def test_two_versicles_before_the_responsories_are_flagged(book):
+    a = book.add("W", office="M", nocturn=1)
+    b = book.add("W", office="M", nocturn=1)
+    book.add("R", office="M", nocturn=1)
+    vals, checks = values(book, [a, b])
+    assert vals == ["1.", "1."] and all("several versicles" in c for c in checks)
+
+
 def test_matins_without_nocturns_is_flagged(book):
     a, b = book.add("A", office="M"), book.add("A", office="M")
     vals, checks = values(book, [a, b])

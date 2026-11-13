@@ -12,7 +12,9 @@ Rules from https://cantusdatabase.org/description/ ("Position"):
   (ad Magnificat, in evangelio ...), or when it follows the hymn or versicle.
 * Matins: antiphons and responsories "nocturn.place" (1.2); a single antiphon
   for a nocturn, and a nocturn's versicle, "n." Without nocturns, numbered in
-  series. Invitatories are blank.
+  series. Invitatories are blank. A versicle after the last responsory of the
+  last nocturn closes Matins and is blank, as in Cantus Database's index of the
+  Tsgrooten Antiphoner (B-Gu Hs BKT.006, fol. 166r: "M W" with no position).
 * Verses of antiphons and responsories: "01", "02" ..., even when only one.
 * Memorials (chants under a commemoration rubric, office known): "R".
 
@@ -147,6 +149,7 @@ def _matins(main, result) -> None:
                 nocturns[row["nocturn"]][genre].append(row)
             else:
                 unassigned[genre].append(row)
+    last_nocturn = max(nocturns, default=None, key=_nocturn_number)
     for n, parts in nocturns.items():
         ants = parts["A"]
         if len(ants) == 1:
@@ -155,8 +158,15 @@ def _matins(main, result) -> None:
             result[row["id"]] = Position(f"{n}.{k}")
         for k, row in enumerate(parts["R"], start=1):
             result[row["id"]] = Position(f"{n}.{k}")
-        for row in parts["W"]:
-            check = f"several versicles in nocturn {n}" if len(parts["W"]) > 1 else None
+        closing = []
+        if n == last_nocturn and parts["R"]:
+            last_r = _order(parts["R"][-1])
+            closing = [w for w in parts["W"] if _order(w) > last_r]
+        for row in closing:
+            result[row["id"]] = Position(None)          # closes Matins
+        opening = [w for w in parts["W"] if w not in closing]
+        for row in opening:
+            check = f"several versicles in nocturn {n}" if len(opening) > 1 else None
             result[row["id"]] = Position(f"{n}.", check)
     for genre, rows in unassigned.items():
         for k, row in enumerate(rows, start=1):
@@ -165,6 +175,17 @@ def _matins(main, result) -> None:
             else:
                 result[row["id"]] = Position(str(k), "Matins without nocturns: numbered in series")
     _singletons_or_series([r for rows in by_genre.values() for r in rows], result)
+
+
+def _order(row) -> tuple[int, int]:
+    return (row["page_start"], row["line_on_page"])
+
+
+def _nocturn_number(n) -> int:
+    try:
+        return int(n)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _canticle_cues(every) -> dict[int, str]:
