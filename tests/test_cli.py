@@ -65,12 +65,13 @@ def test_review_commands(tmp_path, capsys):
 
 def test_fetch_offline_and_genre_map(tmp_path, capsys):
     path = setup(tmp_path, capsys)
+    assert main(["--db", path, "genre-map", "HV", "--clear"]) == 0
     assert main(["--db", path, "fetch", "--offline", "--quiet"]) == 0
     out = capsys.readouterr().out
     assert "6 lines, 0 requests" in out
-    assert "genre HV is not mapped to Cantus Index; close matches had genre: H (1)" in out
+    assert "genre HV is not mapped to Cantus Index; close matches had genre: HV (1)" in out
 
-    assert main(["--db", path, "genre-map", "HV", "H"]) == 0
+    assert main(["--db", path, "genre-map", "HV", "HV"]) == 0
     assert main(["--db", path, "fetch", "--offline", "--quiet"]) == 0
     assert "genre HV is not mapped" not in capsys.readouterr().out
 
@@ -82,3 +83,18 @@ def test_fetch_reports_failures_and_continues(tmp_path, capsys):
         conn.execute("DELETE FROM api_cache")
     assert main(["--db", path, "fetch", "--offline", "--quiet"]) == 2
     assert "6 lines failed" in capsys.readouterr().out
+
+
+def test_positions_source_and_export(tmp_path, capsys):
+    path = setup(tmp_path, capsys)
+    assert main(["--db", path, "positions", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "6 chants; 2 positions need a judgement" in out and "single psalm antiphon" in out
+    assert main(["--db", path, "source", "brev", "--cdb-source-id", "123456"]) == 0
+    out_csv = str(tmp_path / "import.csv")
+    assert main(["--db", path, "export", out_csv]) == 1
+    assert "no Cantus feast" in capsys.readouterr().err
+    assert main(["--db", path, "map-feast", FEAST, "--ci", "Andreae"]) == 0
+    assert main(["--db", path, "export", out_csv]) == 0
+    out = capsys.readouterr().out
+    assert "Wrote 6 chants" in out and "source_id is blank" not in out

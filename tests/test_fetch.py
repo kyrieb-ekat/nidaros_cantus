@@ -18,9 +18,9 @@ CORPUS = [
     {"cid": "w00001", "fulltext": "Fundatus enim erat supra firmam petram", "genre": "W"},
     # the hymn's record is only an incipit -> incomplete
     {"cid": "008314", "fulltext": "Iste confessor*", "genre": "H"},
-    # hymn verse: genre HV is not mapped yet, so genre is not compared
+    # hymn verse: its own genre (HV) in Cantus Index
     {"cid": "008314a", "fulltext": "Qui pius prudens humilis pudicus sobriam duxit",
-     "genre": "H"},
+     "genre": "HV"},
 ]
 
 
@@ -55,7 +55,7 @@ def test_fetch_flags_and_candidates(conn, tmp_path):
     }
     assert flags[("master_seq 4", "CI_VARIANT")][1].startswith("probable parent 003290:")
     assert "w00001 (genre W; this line is V)" in flags[("master_seq 5", "CI_GENRE_NEW_CID")][1]
-    assert summary.unconfirmed_genres == {"HV": {"H": 1}}
+    assert summary.unconfirmed_genres == {}
 
     best = conn.execute(
         "SELECT l.origin_ref, c.cid, c.text_class, c.genre_match FROM candidate c "
@@ -65,7 +65,7 @@ def test_fetch_flags_and_candidates(conn, tmp_path):
         ("master_seq 4", "003290", "suffix", "match"),
         ("master_seq 5", "w00001", "identical", "mismatch"),
         ("master_seq 7", "008314", "incomplete", "match"),
-        ("master_seq 8", "008314a", "minor", "unknown"),
+        ("master_seq 8", "008314a", "minor", "match"),
         ("master_seq 9", "002588", "minor", "match"),   # cue compared via its full text
     ]
     # full records were fetched for the leading candidates
@@ -87,6 +87,17 @@ def test_rerun_uses_cache_and_keeps_cleared_flags(conn, tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM flag WHERE code = 'CI_VARIANT'").fetchone()[0] == 1
     assert conn.execute("SELECT COUNT(*) FROM candidate WHERE method = 'ci_text' AND rank = 1"
                         ).fetchone()[0] == 6
+
+
+def test_unmapped_genre_is_reported_not_compared(conn, tmp_path):
+    fake = setup(conn, tmp_path)
+    with conn:
+        conn.execute("UPDATE genre SET ci_genre = NULL WHERE code = 'HV'")
+    summary, _ = run(conn, fake)
+    assert summary.unconfirmed_genres == {"HV": {"HV": 1}}
+    row = conn.execute("SELECT c.genre_match FROM candidate c JOIN line l ON l.id = c.line_id "
+                       "WHERE l.origin_ref = 'master_seq 8' AND c.rank = 1").fetchone()
+    assert row[0] == "unknown"
 
 
 def test_flag_disappears_when_no_longer_true(conn, tmp_path):

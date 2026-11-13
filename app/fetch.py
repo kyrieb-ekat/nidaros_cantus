@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from .cantus import RESULT_CAP, CantusError, CantusIndex
+from .db import refresh_flags
 from .textmatch import (CLASS_ORDER, Comparison, compare, distinctive_word,
                         query_words, tolerant_query)
 
@@ -217,31 +218,7 @@ def store(conn: sqlite3.Connection, line_id: int, scored: list[Scored],
                 (line_id, s.cid, round(s.comparison.score, 4), rank, METHOD, s.ci_text,
                  s.ci_genre, s.comparison.text_class, s.comparison.reason, s.genre_match),
             )
-        _refresh_flags(conn, line_id, flags)
-
-
-def _refresh_flags(conn: sqlite3.Connection, line_id: int, flags: list[tuple[str, str]]) -> None:
-    """Add new CI flags, update notes, and drop open ones that no longer apply.
-
-    A flag that was cleared stays cleared.
-    """
-    wanted = dict(flags)
-    existing = {r["code"]: r for r in conn.execute(
-        f"SELECT code, status FROM flag WHERE line_id = ? AND code IN "
-        f"({', '.join('?' for _ in CI_FLAGS)})", (line_id, *CI_FLAGS))}
-    for code, row in existing.items():
-        if code not in wanted and row["status"] == "open":
-            conn.execute("DELETE FROM flag WHERE line_id = ? AND code = ?", (line_id, code))
-        elif code in wanted and row["status"] == "open":
-            conn.execute("UPDATE flag SET note = ? WHERE line_id = ? AND code = ?",
-                         (wanted[code], line_id, code))
-    next_ord = conn.execute("SELECT COALESCE(MAX(ord), 0) + 1 FROM flag WHERE line_id = ?",
-                            (line_id,)).fetchone()[0]
-    for code, note in flags:
-        if code not in existing:
-            conn.execute("INSERT INTO flag (line_id, code, ord, note) VALUES (?, ?, ?, ?)",
-                         (line_id, code, next_ord, note))
-            next_ord += 1
+        refresh_flags(conn, line_id, CI_FLAGS, flags)
 
 
 # --------------------------------------------------------------------------

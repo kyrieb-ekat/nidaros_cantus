@@ -18,7 +18,7 @@ EDITABLE_FIELDS = frozenset({
     "nocturn", "slot", "genre", "sign", "fulltext_edition", "fulltext_ms",
     "fulltext_standardized", "rubric", "xref_raw", "xref_leaf",
     "incipit_only", "xref_resolved_page", "xref_resolved_text",
-    "repetendum_note", "variant_notes", "indexing_notes", "extra_note",
+    "repetendum_note", "variant_notes", "indexing_notes", "extra_note", "position_override",
 })
 
 INTEGER_FIELDS = frozenset({"page_end", "nocturn", "incipit_only"})
@@ -282,6 +282,35 @@ def set_flag(conn: sqlite3.Connection, line_id: int, code: str, action: str,
                 ("cleared" if cleared else "open", cleared, note, line_id, code))
         else:
             raise DatabaseError(f"Unknown flag action '{action}'.")
+
+
+def refresh_flags(conn: sqlite3.Connection, line_id: int, codes: tuple[str, ...],
+                  wanted: list[tuple[str, str]]) -> None:
+    """Make a line's machine flags among `codes` match `wanted` [(code, note)].
+
+    New flags are added, notes of open flags updated, and open flags that no
+    longer apply removed. A flag that was cleared stays cleared. Call inside a
+    transaction.
+    """
+    want = dict(wanted)
+    existing = {r["code"]: r["status"] for r in conn.execute(
+        f"SELECT code, status FROM flag WHERE line_id = ? AND code IN "
+        f"({', '.join('?' for _ in codes)})", (line_id, *codes))}
+    for code, status in existing.items():
+        if status != "open":
+            continue
+        if code in want:
+            conn.execute("UPDATE flag SET note = ? WHERE line_id = ? AND code = ?",
+                         (want[code], line_id, code))
+        else:
+            conn.execute("DELETE FROM flag WHERE line_id = ? AND code = ?", (line_id, code))
+    next_ord = conn.execute("SELECT COALESCE(MAX(ord), 0) + 1 FROM flag WHERE line_id = ?",
+                            (line_id,)).fetchone()[0]
+    for code, note in wanted:
+        if code not in existing:
+            conn.execute("INSERT INTO flag (line_id, code, ord, note) VALUES (?, ?, ?, ?)",
+                         (line_id, code, next_ord, note))
+            next_ord += 1
 
 
 def parse_value(field: str, value: str | None):

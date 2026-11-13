@@ -46,7 +46,8 @@ def test_migration_keeps_data_and_matches_a_fresh_database(tmp_path):
     rows = a.execute("SELECT id, status, cid, note FROM decision ORDER BY id").fetchall()
     assert [tuple(r) for r in rows] == [(1, "Reject", "000001", "x"), (2, "Confirm", "000002", None)]
     assert tuple(a.execute("SELECT status, cid FROM current_decision").fetchone()) == ("Confirm", "000002")
-    assert a.execute("SELECT ci_genre FROM genre WHERE code = 'HV'").fetchone()[0] is None
+    assert a.execute("SELECT ci_genre FROM genre WHERE code = 'HV'").fetchone()[0] == "HV"
+    assert "position_override" in [c[1] for c in a.execute("PRAGMA table_info(line)")]
     assert a.execute("SELECT COUNT(*) FROM flag_type WHERE code LIKE 'CI%'").fetchone()[0] == 4
     assert a.execute("SELECT COUNT(*) FROM flag_type WHERE code IN "
                      "('FEAST_SUPPLIED', 'OFFICE_V2_INFERRED')").fetchone()[0] == 2

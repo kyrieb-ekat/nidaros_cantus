@@ -162,8 +162,38 @@ cleared):
 | `CI_TEXT_INCOMPLETE` | The matching Cantus Index record is only an incipit; this line has the full text |
 | `CI_NO_MATCH` | Nothing close was found |
 
-Genres are compared through `genre.ci_genre`. Hymn verses (HV) are not mapped yet; `fetch`
-reports which Cantus Index genre their close matches have, and `genre-map HV <code>` sets it.
+Genres are compared through `genre.ci_genre`; `genre-map` changes the mapping. Hymn verses
+are their own genre (HV) in Cantus Index, with IDs such as `830381a` or, following Analecta
+Hymnica, `ah51067:02` (hymn and stanza number). Both forms turn up as candidates.
+
+## Positions and the import file
+
+Positions follow the Cantus Database rules (https://cantusdatabase.org/description/):
+psalm antiphons of Lauds and Vespers 1–5 (`p` for one antiphon for all psalms), canticle
+antiphons `M`, `B`, `N`, Matins `nocturn.place` (`1.2`) with versicles `1.`, verses `01`,
+memorials `R`, and blank for the only chant of its genre in a service. Hymn stanzas are
+numbered `02`, `03` … after the hymn, pending confirmation. A canticle antiphon is recognised
+by the psalm cue after it ("Psalmus Benedictus"), its slot, or its place after the hymn.
+
+Where the rules need a judgement the line is flagged `POSITION_CHECK` with the reason; a
+position set by hand always wins:
+
+```
+python -m app positions --list
+python -m app edit 83 position_override "3."
+```
+
+To write the import file:
+
+```
+python -m app source brev --cdb-source-id 123456
+python -m app export data/import_brev.csv
+```
+
+The export uses the template's 27 columns. `folio` is the page with leading zeros,
+`sequence` the chant's order on its page, `feast` the mapped Cantus feast, `cantus_id` the
+CID of a current Confirm or Fixed decision only, and `extra` the rubric followed by
+`extra_note`. It stops if any heading is unmapped, unless `--allow-unmapped` is given.
 
 ## Layout
 
@@ -177,6 +207,8 @@ app/
   cantus.py       Cantus Index client, cache, concordance evidence
   textmatch.py    normalisation, text comparison, search queries
   fetch.py        candidate lookup and CI flags
+  positions.py    Cantus Database position rules
+  export.py       Cantus Database import CSV
   feasts.py       feast list and feast mapping
   variants.py     requests for new Cantus IDs, and assigned codes
 pipeline/         parser scripts that produce the master workbooks
@@ -198,7 +230,7 @@ tests/            run without network access, using saved Cantus Index responses
 | `spot_check` | Lines picked out for checking, with status and notes |
 | `candidate` | Proposed Cantus IDs per line, with score, text class and reason |
 | `decision` | Confirm / Reject / Fixed / Variant / New CID; append-only, latest one counts |
-| `edit_log` | Every change made to a line after import |
+| `edit_log` | Every change made to a line after import, including hand-set positions (`position_override`) |
 | `api_cache` | Cantus Index responses |
 | `feast_map` | Each feast heading's Cantus feast, and whether it is exact |
 | `genre`, `office` | Genre and service codes, with each genre's Cantus Index code |
@@ -206,7 +238,8 @@ tests/            run without network access, using saved Cantus Index responses
 Book order is `(page_start, line_on_page)`. `line_on_page` is numbered in steps of 10 so
 lines can be inserted later without renumbering. `incipit`, `position`, `in_import` and
 `import_seq` are derived rather than stored, so they stay correct when texts are corrected
-or lines are added; the `line_export` view computes the last three.
+or lines are added. The `line_export` view keeps the parser's running position, used to
+check imports; the Cantus Database position comes from `app/positions.py`.
 
 ## Tests
 

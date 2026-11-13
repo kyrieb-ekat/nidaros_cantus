@@ -4,6 +4,7 @@ Setting up
   init              create a new, empty database
   migrate           upgrade an existing database to the current schema
   add-source        register a book (e.g. the Breviarium)
+  source            set a book's Cantus Database source ID, title or edition
   import            import a parser-generated master workbook for a book
 
 Cantus Index
@@ -18,6 +19,8 @@ Correcting
   flag              add, clear or reopen a flag on a line
 
 Reviewing
+  positions         recompute Cantus Database positions and flag those to check
+  export            write the Cantus Database import CSV
   status            counts per book
   show              one line with its text, flags, candidates and evidence
   decide            record a decision for a line
@@ -31,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 import textwrap
 
 from . import db
@@ -38,7 +42,9 @@ from .cantus import CantusError, CantusIndex, evidence
 from .feasts import (STATUSES, ci_feasts, feast_headings, find_feast, map_feast,
                      mapped_feast_names, search_feasts)
 from .fetch import comparison_text, fetch_lines, target_lines
+from .export import export_import_file
 from .importer import import_workbook
+from .positions import compute_positions, refresh_position_flags
 from .variants import export_requests, import_codes
 
 DECISION_WORDS = {
@@ -62,6 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("title", help='e.g. "Breviarium Nidrosiense"')
     p.add_argument("--edition", help="edition the text is taken from")
     p.add_argument("--cdb-source-id", type=int, help="Cantus Database source ID, once known")
+
+    p = sub.add_parser("source", help="update a book")
+    p.add_argument("siglum")
+    p.add_argument("--cdb-source-id", type=int)
+    p.add_argument("--title")
+    p.add_argument("--edition")
 
     p = sub.add_parser("import", help="import a master workbook")
     p.add_argument("workbook")
@@ -117,6 +129,16 @@ def main(argv: list[str] | None = None) -> int:
     action.add_argument("--clear", dest="action", action="store_const", const="clear")
     action.add_argument("--reopen", dest="action", action="store_const", const="reopen")
     p.add_argument("--note")
+
+    p = sub.add_parser("positions", help="recompute positions; flag those needing a judgement")
+    p.add_argument("--source")
+    p.add_argument("--list", action="store_true", help="list the lines to check")
+
+    p = sub.add_parser("export", help="write the Cantus Database import CSV")
+    p.add_argument("path")
+    p.add_argument("--source")
+    p.add_argument("--allow-unmapped", action="store_true",
+                   help="export even if some headings have no Cantus feast (printed heading used)")
 
     p = sub.add_parser("status", help="show counts")
     p.add_argument("--source", help="limit to one book")
@@ -205,6 +227,21 @@ def cmd_add_source(args) -> int:
             (args.siglum, args.title, args.edition, args.cdb_source_id),
         )
     print(f"Added source '{args.siglum}': {args.title}")
+    return 0
+
+
+def cmd_source(args) -> int:
+    conn = db.connect(args.db)
+    changes = {k: v for k, v in (("cdb_source_id", args.cdb_source_id), ("title", args.title),
+                                 ("edition", args.edition)) if v is not None}
+    if not changes:
+        raise db.DatabaseError("Nothing to change; give --cdb-source-id, --title or --edition.")
+    with conn:
+        n = conn.execute(f"UPDATE source SET {', '.join(f'{k} = ?' for k in changes)} "
+                         "WHERE siglum = ?", (*changes.values(), args.siglum)).rowcount
+    if not n:
+        raise db.DatabaseError(f"No source '{args.siglum}'.")
+    print(f"{args.siglum}: " + ", ".join(f"{k} = {v}" for k, v in changes.items()))
     return 0
 
 
@@ -381,6 +418,45 @@ def cmd_flag(args) -> int:
     return 0
 
 
+def cmd_positions(args) -> int:
+    conn = db.connect(args.db)
+    source = _source(conn, args.source)
+    positions = refresh_position_flags(conn, source["id"])
+    checks = {i: p for i, p in positions.items() if p.check}
+    print(f"{len(positions)} chants; {len(checks)} positions need a judgement (flag POSITION_CHECK).")
+    reasons = Counter(p.check.split(":")[0].split(";")[0] for p in checks.values())
+    for reason, n in reasons.most_common():
+        print(f"  {n:>4}  {reason}")
+    if args.list and checks:
+        rows = {r["id"]: r for r in conn.execute(
+            f"SELECT * FROM line WHERE id IN ({', '.join('?' for _ in checks)})", tuple(checks))}
+        for i in sorted(checks, key=lambda i: (rows[i]["page_start"], rows[i]["line_on_page"])):
+            r, p = rows[i], checks[i]
+            print(f"  line {i:<5} p.{r['page_start']} {r['office'] or '-':<3} {r['genre']:<3} "
+                  f"{p.value or '(blank)':<6} {_short(r['fulltext_standardized'], 30):<31} {p.check}")
+    print("Set a position by hand with `python -m app edit LINE position_override VALUE`.")
+    return 0
+
+
+def cmd_export(args) -> int:
+    conn = db.connect(args.db)
+    source = _source(conn, args.source)
+    refresh_position_flags(conn, source["id"])
+    report = export_import_file(conn, source["id"], args.path, args.allow_unmapped)
+    print(f"Wrote {report.rows} chants to {args.path}.")
+    print(f"  Cantus IDs filled        {report.cantus_ids}")
+    for status, n in sorted(report.decisions.items()):
+        print(f"    decision {status:<14} {n}")
+    print(f"  positions to check       {report.position_checks}")
+    print(f"  lines with open flags    {report.open_flags}")
+    if report.unmapped:
+        print("  headings without a Cantus feast (printed heading used): " + "; ".join(report.unmapped))
+    if not source["cdb_source_id"]:
+        print("  source_id is blank: set it with `python -m app source "
+              f"{source['siglum']} --cdb-source-id N`.")
+    return 0
+
+
 def cmd_show(args) -> int:
     conn = db.connect(args.db)
     line = conn.execute("SELECT * FROM line_export WHERE id = ?", (args.line_id,)).fetchone()
@@ -390,9 +466,11 @@ def cmd_show(args) -> int:
                            (line["source_id"], line["feast"])).fetchone()
     feast_note = f" -> {mapping['ci_feast'] or '(none)'} ({mapping['status']})" if mapping \
         else " (not mapped)"
+    cdb = compute_positions(conn, line["source_id"]).get(line["id"])
+    cdb_text = "-" if cdb is None else (cdb.value or "(blank)") + (" ?" if cdb.check else "")
     print(f"line {line['id']}  p.{line['page_start']} {line['signature_leaf'] or ''}  "
           f"{line['row_type']}  genre {line['genre'] or '-'}  office {line['office'] or '-'}  "
-          f"position {line['position'] or '-'}")
+          f"position {cdb_text}")
     print(f"feast: {line['feast']}{feast_note}")
     if line["rubric"] or line["extra_note"]:
         extra = " | ".join(x for x in (line["rubric"], line["extra_note"]) if x)
@@ -560,6 +638,7 @@ COMMANDS = {
     "init": cmd_init,
     "migrate": cmd_migrate,
     "add-source": cmd_add_source,
+    "source": cmd_source,
     "import": cmd_import,
     "feasts": cmd_feasts,
     "map-feast": cmd_map_feast,
@@ -568,6 +647,8 @@ COMMANDS = {
     "edit": cmd_edit,
     "split-feast": cmd_split_feast,
     "flag": cmd_flag,
+    "positions": cmd_positions,
+    "export": cmd_export,
     "status": cmd_status,
     "show": cmd_show,
     "decide": cmd_decide,
