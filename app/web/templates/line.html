@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import keep, incipit %}
+{% from "_macros.html" import keep, incipit with context %}
 {% block title %}{% if view %}p. {{ view.line.page_start }} {{ incipit(view.line.fulltext_standardized, 4) }}{% else %}Chants{% endif %}{% endblock %}
 {% block body %}
 <main class="review"

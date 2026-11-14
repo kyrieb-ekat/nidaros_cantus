@@ -45,6 +45,15 @@ def create_app(db_path: str | Path, siglum: str | None = None, transport=None,
         if conn is not None:
             conn.close()
 
+    @app.errorhandler(403)
+    def refused(_exc):
+        back = request.referrer or url_for("lines")
+        return (f"<!doctype html><title>Not saved</title><body style=\"font: 15px/1.5 system-ui; "
+                f"margin: 3rem auto; max-width: 36rem\"><h1 style=\"font-weight: normal\">Not saved"
+                f"</h1><p>This page was opened before the review screen was last started, so the "
+                f"change was refused. Go back, reload the page, and try again.</p>"
+                f"<p><a href=\"{back}\">Back to the page</a></p></body>", 403)
+
     @app.context_processor
     def common():
         return {"token": app.config["FORM_TOKEN"], "source": g.get("source")}

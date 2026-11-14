@@ -35,7 +35,16 @@ def site(tmp_path):
                 target_lines(conn, 1, line_ids=[3, 4]))
     conn.close()
     app = create_app(path, transport=fake, min_interval=0)
-    return app.test_client(), app.config["FORM_TOKEN"], path
+    client = app.test_client()
+    return client, page_token(client, "/line/3"), path
+
+
+def page_token(client, url):
+    """The token as the browser sends it: read from the forms on the page."""
+    html = client.get(url).get_data(as_text=True)
+    tokens = set(re.findall(r'name="token" value="([^"]*)"', html))
+    assert len(tokens) == 1 and "" not in tokens, tokens
+    return tokens.pop()
 
 
 def current(path, line_id):
@@ -58,9 +67,19 @@ def test_pages_render(site):
     assert "No chants match" in client.get("/lines?status=Confirm").get_data(as_text=True)
 
 
+def test_every_form_carries_the_token(site):
+    client, token, _ = site
+    for url in ("/line/3", "/line/4", "/feasts?q=andre&heading=" + FEAST):
+        html = client.get(url).get_data(as_text=True)
+        forms = re.findall(r'<form method="post".*?</form>', html, re.S)
+        assert forms
+        assert all(f'name="token" value="{token}"' in form for form in forms)
+
+
 def test_changes_need_the_token(site):
     client, _, path = site
-    assert client.post("/line/3/decide", data={"decision": "Reject"}).status_code == 403
+    r = client.post("/line/3/decide", data={"decision": "Reject"})
+    assert r.status_code == 403 and "reload the page" in r.get_data(as_text=True)
     assert current(path, 3) is None
 
 
