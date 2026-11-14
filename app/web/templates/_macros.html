@@ -1,0 +1,8 @@
+{% macro keep(filters) -%}
+  <input type="hidden" name="token" value="{{ token }}">
+  {% for k, v in filters.query().items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+{%- endmacro %}
+
+{% macro incipit(text, n=6) -%}
+  {{ (text or '').split()[:n] | join(' ') }}
+{%- endmacro %}

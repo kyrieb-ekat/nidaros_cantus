@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% from "_macros.html" import keep, incipit %}
+{% block title %}{% if view %}p. {{ view.line.page_start }} {{ incipit(view.line.fulltext_standardized, 4) }}{% else %}Chants{% endif %}{% endblock %}
+{% block body %}
+<main class="review"
+      data-prev="{{ url_for('line', line_id=prev_id, **filters.query()) if prev_id else '' }}"
+      data-next="{{ url_for('line', line_id=next_id, **filters.query()) if next_id else '' }}">
+
+  <aside class="queue" aria-label="Chants to review">
+    <form class="filters" method="get" action="{{ url_for('lines') }}">
+      <label>Feast
+        <select name="feast"><option value="">All</option>
+          {% for f in choices.feasts %}<option value="{{ f }}" {{ 'selected' if filters.feast == f }}>{{ f }}</option>{% endfor %}
+        </select></label>
+      <label>Office
+        <select name="office"><option value="">All</option>
+          {% for o in choices.offices %}<option {{ 'selected' if filters.office == o }}>{{ o }}</option>{% endfor %}
+        </select></label>
+      <label>Flag
+        <select name="flag"><option value="">Any</option>
+          {% for c in choices.flags %}<option {{ 'selected' if filters.flag == c }}>{{ c }}</option>{% endfor %}
+        </select></label>
+      <label>Decision
+        <select name="status"><option value="">Any</option>
+          {% for s in choices.statuses %}<option {{ 'selected' if filters.status == s }}>{{ s }}</option>{% endfor %}
+        </select></label>
+      <button type="submit">Show</button>
+    </form>
+    <p class="count">{{ rows|length }} chant{{ '' if rows|length == 1 else 's' }}</p>
+    <ol class="list">
+      {% for r in rows %}
+        <li class="{{ 'current' if view and r.id == view.line.id }} {{ 'decided' if r.decision }}">
+          <a href="{{ url_for('line', line_id=r.id, **filters.query()) }}">
+            <span class="where">{{ r.page_start }} {{ r.office or '–' }} {{ r.genre }}</span>
+            <span class="what">{{ incipit(r.fulltext_standardized, 5) }}</span>
+            <span class="state">{% if r.decision %}{{ r.decision }}{% if r.decided_cid %} {{ r.decided_cid }}{% endif %}{% elif r.open_flags %}<span class="mark">{{ r.open_flags }} flag{{ '' if r.open_flags == 1 else 's' }}</span>{% endif %}</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ol>
+  </aside>
+
+  {% if not view %}
+    <section class="line empty"><p>No chants match these filters. Choose fewer filters, or show all chants.</p></section>
+  {% else %}
+  {% set L = view.line %}
+  <section class="line" aria-label="Chant">
+    <div class="locus">
+      <p class="place">p. {{ L.page_start }}{% if L.signature_leaf %}, {{ L.signature_leaf }}{% endif %}{% if L.facsimile_ref %} ({{ L.facsimile_ref }}){% endif %}, line {{ L.id }}</p>
+      <h1 class="feast">{{ L.feast or 'No feast heading' }}</h1>
+      <p class="mapping">
+        {% if view.mapping %}Cantus feast: <strong>{{ view.mapping.ci_feast or 'none' }}</strong> ({{ view.mapping.status }})
+        {% else %}<span class="rub">No Cantus feast yet.</span>{% endif %}
+        <a href="{{ url_for('feasts', heading=L.feast) }}">Map feast</a>
+      </p>
+      <p class="service">
+        <span>Office <strong>{{ L.office or '–' }}</strong></span>
+        <span>Genre <strong>{{ L.genre }}</strong></span>
+        <span>Position <strong>{{ (view.position.value if view.position else None) or 'blank' }}</strong>{% if view.position and view.position.check %} <span class="rub" title="{{ view.position.check }}">to check</span>{% endif %}</span>
+        {% if L.nocturn %}<span>Nocturn <strong>{{ L.nocturn }}</strong></span>{% endif %}
+      </p>
+      <p class="decision">
+        {% if view.decision %}Decision: <strong>{{ view.decision.status }}{% if view.decision.cid %} {{ view.decision.cid }}{% endif %}</strong>{% if view.decision.parent_cid %} (parent {{ view.decision.parent_cid }}){% endif %}
+        {% else %}Not decided yet.{% endif %}
+      </p>
+    </div>
+
+    <ol class="context" aria-label="Surrounding lines">
+      {% for c in view.context %}
+        <li class="{{ 'here' if c.id == L.id }} {{ c.row_type }}">
+          <span class="kind">{{ c.office or '' }} {{ c.genre or c.row_type.replace('_', ' ') }}</span>
+          <span class="txt">
+            {% if c.rubric %}<span class="rub">{{ c.rubric }}</span> {% endif %}
+            {% if c.in_import and c.id != L.id %}<a href="{{ url_for('line', line_id=c.id, **filters.query()) }}">{{ c.fulltext_edition or '' }}</a>
+            {% else %}{{ c.fulltext_edition or c.feast if c.row_type == 'heading' else c.fulltext_edition or '' }}{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ol>
+
+    <dl class="texts">
+      <dt>Edition</dt><dd class="latin">{{ L.fulltext_edition or '–' }}</dd>
+      <dt>Source spelling</dt><dd class="latin">{{ L.fulltext_ms or '–' }}</dd>
+      <dt>Standardized</dt>
+      <dd>
+        <form method="post" action="{{ url_for('edit', line_id=L.id) }}" class="inline-edit">
+          {{ keep(filters) }}<input type="hidden" name="field" value="fulltext_standardized">
+          <textarea name="value" class="latin" rows="3">{{ L.fulltext_standardized or '' }}</textarea>
+          <button type="submit">Save text</button>
+        </form>
+      </dd>
+      {% if view.text and view.text != L.fulltext_standardized %}
+        <dt>Compared with</dt><dd class="latin">{{ view.text }}{% if view.is_cue %} <span class="rub">(cue only)</span>{% endif %}</dd>
+      {% endif %}
+      <dt>Extra</dt>
+      <dd>
+        {% if L.rubric %}<p class="rub">{{ L.rubric }}</p>{% endif %}
+        <form method="post" action="{{ url_for('edit', line_id=L.id) }}" class="inline-edit">
+          {{ keep(filters) }}<input type="hidden" name="field" value="extra_note">
+          <input name="value" value="{{ L.extra_note or '' }}" placeholder="Editorial note for the extra field">
+          <button type="submit">Save note</button>
+        </form>
+      </dd>
+      <dt>Position</dt>
+      <dd>
+        {% if view.position and view.position.check %}<p class="rub">{{ view.position.check }}</p>{% endif %}
+        <form method="post" action="{{ url_for('edit', line_id=L.id) }}" class="inline-edit">
+          {{ keep(filters) }}<input type="hidden" name="field" value="position_override">
+          <input name="value" value="{{ L.position_override or '' }}" placeholder="Set by hand, e.g. 3." size="10">
+          <button type="submit">Set position</button>
+        </form>
+      </dd>
+    </dl>
+
+    {% if view.flags %}
+    <ul class="flags" aria-label="Flags">
+      {% for f in view.flags %}
+        <li class="{{ f.status }}">
+          <span class="code">{{ f.code }}</span>{% if f.note %} <span class="note">{{ f.note }}</span>{% endif %}
+          <form method="post" action="{{ url_for('flag', line_id=L.id) }}">
+            {{ keep(filters) }}<input type="hidden" name="code" value="{{ f.code }}">
+            {% if f.status == 'open' %}<button name="action" value="clear">Clear</button>
+            {% else %}<button name="action" value="reopen">Reopen</button>{% endif %}
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('decide', line_id=L.id) }}" class="decide">
+      {{ keep(filters) }}
+      <fieldset>
+        <legend>Record a decision without a candidate</legend>
+        <label>Cantus ID <input name="cid" size="12" placeholder="for Fixed"></label>
+        <label>Parent <input name="parent" size="12" placeholder="for New CID"></label>
+        <label>Reason <input name="reason" placeholder="for New CID"></label>
+        <label>Note <input name="note"></label>
+        <label class="check"><input type="checkbox" name="advance" value="1" checked> Go to the next chant</label>
+        <div class="buttons">
+          <button name="decision" value="Fixed">Fixed</button>
+          <button name="decision" value="New CID">New CID</button>
+          <button name="decision" value="Reject">Reject</button>
+        </div>
+      </fieldset>
+    </form>
+
+    {% if view.history %}
+    <details class="history"><summary>History ({{ view.history|length }})</summary>
+      <ul>{% for h in view.history %}<li><time>{{ h.at }}</time> {{ h.what }}{% if h.note %}: {{ h.note }}{% endif %}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="candidates" aria-label="Cantus Index candidates">
+    <form method="post" action="{{ url_for('fetch', line_id=L.id) }}" class="lookup">
+      {{ keep(filters) }}
+      <button type="submit" data-key="f">{{ 'Look up again' if view.candidates else 'Look up in Cantus Index' }}</button>
+      {% if view.candidates %}<label class="check"><input type="checkbox" name="refresh" value="1"> ignore the cache</label>{% endif %}
+    </form>
+    {% if view.responsory_cid %}<p class="hint">Verses related to the responsory's {{ view.responsory_cid }} are listed first.</p>{% endif %}
+    {% if not view.candidates %}<p class="hint">No candidates yet. Look this chant up to see matching Cantus IDs.</p>{% endif %}
+
+    {% for c in view.candidates %}
+      {% set C = c.row %}
+      <article class="cand {{ C.text_class }} {{ C.genre_match }}{{ ' promoted' if c.promoted }}">
+        <header>
+          <span class="n">{{ loop.index }}</span>
+          <a class="cid" href="https://cantusindex.org/id/{{ C.cid }}" target="_blank" rel="noopener">{{ C.cid }}</a>
+          <span>{{ C.cand_genre or '?' }}{% if C.genre_match == 'mismatch' %} <span class="rub">other genre</span>{% endif %}</span>
+          <span class="cls">{{ C.text_class }}</span>
+          <span class="score">{{ '%.2f'|format(C.score or 0) }}</span>
+        </header>
+        <p class="reason">{{ C.class_reason }}</p>
+        <p class="diff latin" aria-label="Candidate text">{% for t in c.diff_ci %}<span class="{{ t.op }}">{{ t.text }}</span> {% endfor %}</p>
+        <p class="diff latin mine" aria-label="This chant">{% for t in c.diff_local %}<span class="{{ t.op }}">{{ t.text }}</span> {% endfor %}</p>
+        {% if c.ev %}
+          <p class="ev">
+            Cantus feast <strong>{{ c.ev.ci_feast or '–' }}</strong>{% if c.ev.cao %}, CAO {{ c.ev.cao }} {{ c.ev.cao_sigla or '' }}{% endif %}{% if c.ev.related_cid %}, related to {{ c.ev.related_cid }}{% endif %}.
+            {{ c.ev.total }} concordance{{ '' if c.ev.total == 1 else 's' }}{% if not c.ev.complete %} (Cantus Index reports more){% endif %}:
+            {% for db_code, n in c.ev.records|dictsort(by='value', reverse=true) %}{{ db_code }} {{ n }}{{ ', ' if not loop.last }}{% endfor %}.
+            {% if view.mapping and view.mapping.ci_feast %}Same feast {{ c.ev.same_feast.values()|sum }}, same feast and office {{ c.ev.same_feast_office.values()|sum }}.{% endif %}
+          </p>
+        {% endif %}
+        <div class="actions">
+          <form method="post" action="{{ url_for('decide', line_id=L.id) }}">
+            {{ keep(filters) }}<input type="hidden" name="cid" value="{{ C.cid }}"><input type="hidden" name="advance" value="1">
+            <button name="decision" value="Confirm" data-confirm="{{ loop.index }}">Confirm {{ C.cid }}</button>
+          </form>
+          <form method="post" action="{{ url_for('decide', line_id=L.id) }}">
+            {{ keep(filters) }}<input type="hidden" name="parent" value="{{ C.cid }}"><input type="hidden" name="reason" value="{{ C.class_reason }}"><input type="hidden" name="advance" value="1">
+            <button name="decision" value="Variant">Variant of {{ C.cid }}</button>
+          </form>
+        </div>
+        {% if c.concordances %}
+        <details class="conc"><summary>Concordances ({{ c.concordances|length }})</summary>
+          <div class="scroll"><table>
+            <thead><tr><th>Source</th><th>Database</th><th>Feast</th><th>Office</th><th>Position</th><th>Folio</th><th>Century</th><th>Text</th></tr></thead>
+            <tbody>
+            {% for k in c.concordances %}
+              <tr class="{{ 'samefeast' if view.mapping and view.mapping.ci_feast and (k.feast or '')|lower == view.mapping.ci_feast|lower }}">
+                <td>{% if k.srclink %}<a href="{{ k.srclink }}" target="_blank" rel="noopener">{{ k.siglum }}</a>{% else %}{{ k.siglum }}{% endif %}</td>
+                <td>{{ k.db }}</td><td>{{ k.feast }}</td><td>{{ k.office }}</td><td>{{ k.position }}</td>
+                <td>{% if k.chantlink %}<a href="{{ k.chantlink }}" target="_blank" rel="noopener">{{ k.folio }}</a>{% else %}{{ k.folio }}{% endif %}{% if k.image and k.image != '0' %} <a href="{{ k.image }}" target="_blank" rel="noopener">image</a>{% endif %}</td>
+                <td>{{ k.century or '' }}</td><td class="latin">{{ k.fulltext }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table></div>
+        </details>
+        {% endif %}
+      </article>
+    {% endfor %}
+    <p class="keys">Keys: <kbd>j</kbd>/<kbd>k</kbd> next and previous chant, <kbd>1</kbd>–<kbd>9</kbd> confirm that candidate, <kbd>f</kbd> look up.</p>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

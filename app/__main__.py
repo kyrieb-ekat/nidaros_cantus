@@ -19,6 +19,7 @@ Correcting
   flag              add, clear or reopen a flag on a line
 
 Reviewing
+  serve             open the review screen in your browser
   positions         recompute Cantus Database positions and flag those to check
   export            write the Cantus Database import CSV
   status            counts per book
@@ -129,6 +130,11 @@ def main(argv: list[str] | None = None) -> int:
     action.add_argument("--clear", dest="action", action="store_const", const="clear")
     action.add_argument("--reopen", dest="action", action="store_const", const="reopen")
     p.add_argument("--note")
+
+    p = sub.add_parser("serve", help="open the review screen in your browser")
+    p.add_argument("--source")
+    p.add_argument("--port", type=int, default=5000)
+    p.add_argument("--no-browser", action="store_true", help="do not open a browser window")
 
     p = sub.add_parser("positions", help="recompute positions; flag those needing a judgement")
     p.add_argument("--source")
@@ -418,6 +424,25 @@ def cmd_flag(args) -> int:
     return 0
 
 
+def cmd_serve(args) -> int:
+    import threading
+    import webbrowser
+
+    from .web import create_app
+
+    conn = db.connect(args.db)
+    source = _source(conn, args.source)
+    refresh_position_flags(conn, source["id"])
+    conn.close()
+    app = create_app(args.db, source["siglum"])
+    url = f"http://127.0.0.1:{args.port}/"
+    print(f"Review screen for {source['title']} at {url} (Ctrl-C to stop)")
+    if not args.no_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    app.run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False)
+    return 0
+
+
 def cmd_positions(args) -> int:
     conn = db.connect(args.db)
     source = _source(conn, args.source)
@@ -647,6 +672,7 @@ COMMANDS = {
     "edit": cmd_edit,
     "split-feast": cmd_split_feast,
     "flag": cmd_flag,
+    "serve": cmd_serve,
     "positions": cmd_positions,
     "export": cmd_export,
     "status": cmd_status,

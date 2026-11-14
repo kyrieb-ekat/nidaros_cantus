@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Feasts{% endblock %}
+{% block body %}
+<main class="feastpage">
+  <section>
+    <h1>Feast headings</h1>
+    <p class="hint">Each heading, printed or supplied, needs the Cantus feast it stands for. The import file uses that name.</p>
+    <table class="headings">
+      <thead><tr><th>Page</th><th>Heading</th><th>Lines</th><th>Cantus feast</th><th></th></tr></thead>
+      <tbody>
+      {% for h in headings %}
+        <tr class="{{ 'current' if heading == h.feast }} {{ h.status or 'unmapped-yet' }}">
+          <td>{{ h.first_page }}</td><td>{{ h.feast }}</td><td>{{ h.lines }}</td>
+          <td>{% if h.status %}{{ h.ci_feast or 'none' }} ({{ h.status }}){% else %}<span class="rub">not mapped</span>{% endif %}</td>
+          <td><a href="{{ url_for('feasts', heading=h.feast, q=term) }}">Map</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>{% if heading %}Map {{ heading }}{% else %}Find a Cantus feast{% endif %}</h2>
+    <form method="get" class="search">
+      {% if heading %}<input type="hidden" name="heading" value="{{ heading }}">{% endif %}
+      <input name="q" value="{{ term }}" placeholder="e.g. andre, lucia, nicolai" autofocus>
+      <button type="submit">Search</button>
+    </form>
+    {% if error %}<p class="msg error">{{ error }}</p>{% endif %}
+    {% if term and not hits and not error %}<p class="hint">No Cantus feast matches “{{ term }}”. Try part of the name.</p>{% endif %}
+    {% if hits %}
+    <ul class="hits">
+      {% for f in hits %}
+        <li>
+          <strong>{{ f.name }}</strong> {{ f.code or '' }} {{ f.date or '' }}
+          {% if f.alt_names %}<span class="alt">also {{ f.alt_names|join(', ') }}</span>{% endif %}
+          {% if f.description %}<span class="desc">{{ f.description }}</span>{% endif %}
+          {% if heading %}
+          <form method="post" action="{{ url_for('feasts_map') }}">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="heading" value="{{ heading }}"><input type="hidden" name="ci" value="{{ f.name }}">
+            <button name="status" value="exact">Exact</button>
+            <button name="status" value="variant">Closest (variant)</button>
+          </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if heading %}
+      <form method="post" action="{{ url_for('feasts_map') }}" class="none">
+        <input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="heading" value="{{ heading }}">
+        <button name="status" value="unmapped">No Cantus feast fits</button>
+      </form>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

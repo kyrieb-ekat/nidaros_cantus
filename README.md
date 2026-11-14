@@ -16,7 +16,8 @@ Python 3.10 or later. In a fresh environment:
 pip install -r requirements.txt
 ```
 
-The parser in `pipeline/` also needs `beautifulsoup4` and `lxml`, which are included.
+The review screen needs Flask, and the parser in `pipeline/` needs `beautifulsoup4` and
+`lxml`; all are included.
 
 ## Initialising the database
 
@@ -60,6 +61,32 @@ Spot-check list, any CID candidates and decisions already in the workbook, the f
 from the README sheet, and the connections between lines: responsory verse to responsory,
 hymn stanza and refrain to hymn, and incipit-only item to the line holding its full text
 when that line is in the same workbook.
+
+## Review screen
+
+```
+python -m app serve
+```
+
+opens the review screen in your browser (at http://127.0.0.1:5000/; `--port` to change it,
+`--no-browser` to open it yourself). It runs on this computer only and uses the same database
+as the commands, so every change is logged in the same way. Stop it with Ctrl-C.
+
+* **Queue** (left): every chant, filterable by feast, office, open flag and decision.
+* **Chant** (middle): the lines around it in the book, its edition, source and standardized
+  texts, the extra field, its Cantus Database position, its flags and its history. The
+  standardized text, the editorial note and the position can be corrected in place, and flags
+  cleared or reopened.
+* **Candidates** (right): each Cantus ID with a word-by-word comparison (differences in this
+  chant underlined in red, in the candidate shaded blue), its class and reason, its Cantus
+  feast and concordances by database, and the full concordance table with links to the chant,
+  the source and the page image. Confirm it, or record it as the parent of a variant. For a
+  verse, candidates related to the responsory's confirmed Cantus ID come first.
+* **Feasts**: every heading and its Cantus feast; search the Cantus feast list and map a
+  heading, then the screen moves on to the next unmapped one.
+
+Keys: `j` and `k` for the next and previous chant, `1` to `9` to confirm that candidate, `f`
+to look the chant up in Cantus Index. A decision moves on to the next chant in the queue.
 
 ## Correcting lines
 
@@ -210,6 +237,7 @@ app/
   fetch.py        candidate lookup and CI flags
   positions.py    Cantus Database position rules
   export.py       Cantus Database import CSV
+  web/            review screen (Flask): routes, templates, styles
   feasts.py       feast list and feast mapping
   variants.py     requests for new Cantus IDs, and assigned codes
 pipeline/         parser scripts that produce the master workbooks
