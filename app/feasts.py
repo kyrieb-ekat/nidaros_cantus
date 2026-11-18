@@ -43,9 +43,18 @@ def ci_feasts(client: CantusIndex) -> list[CIFeast]:
         name = (item.get("feastname") or "").strip()
         if not name:
             continue
-        alts = tuple(a.strip() for a in (item.get("alt_feast_names") or []) if a and a.strip())
-        feasts.append(CIFeast(item.get("feastcode"), name, alts,
-                              item.get("description"), item.get("feastdate")))
+        alts = tuple(
+            a.strip() for a in (item.get("alt_feast_names") or []) if a and a.strip()
+        )
+        feasts.append(
+            CIFeast(
+                item.get("feastcode"),
+                name,
+                alts,
+                item.get("description"),
+                item.get("feastdate"),
+            )
+        )
     return feasts
 
 
@@ -57,7 +66,9 @@ def search_feasts(feasts: list[CIFeast], term: str) -> list[CIFeast]:
     needle = _fold(term)
     hits = []
     for feast in feasts:
-        haystack = " | ".join(_fold(t) for t in feast.names + (feast.description or "",))
+        haystack = " | ".join(
+            _fold(t) for t in feast.names + (feast.description or "",)
+        )
         if needle in haystack:
             hits.append(feast)
     return hits
@@ -68,8 +79,10 @@ def find_feast(feasts: list[CIFeast], name: str) -> CIFeast:
     wanted = name.strip().casefold()
     matches = [f for f in feasts if wanted in (n.casefold() for n in f.names)]
     if not matches:
-        raise DatabaseError(f"No Cantus Index feast is called '{name}'. "
-                            "Use `python -m app feasts --search` to find the name.")
+        raise DatabaseError(
+            f"No Cantus Index feast is called '{name}'. "
+            "Use `python -m app feasts --search` to find the name."
+        )
     if len({f.name for f in matches}) > 1:
         names = ", ".join(sorted({f.name for f in matches}))
         raise DatabaseError(f"'{name}' matches several Cantus Index feasts: {names}.")
@@ -87,17 +100,29 @@ def feast_headings(conn: sqlite3.Connection, source_id: int) -> list[sqlite3.Row
         WHERE l.source_id = ? AND l.feast IS NOT NULL
         GROUP BY l.feast
         ORDER BY MIN(l.page_start * 100000 + l.line_on_page)
-        """, (source_id,)).fetchall()
+        """,
+        (source_id,),
+    ).fetchall()
 
 
-def map_feast(conn: sqlite3.Connection, source_id: int, heading: str, status: str,
-              feast: CIFeast | None = None, note: str | None = None) -> None:
+def map_feast(
+    conn: sqlite3.Connection,
+    source_id: int,
+    heading: str,
+    status: str,
+    feast: CIFeast | None = None,
+    note: str | None = None,
+) -> None:
     if status not in STATUSES:
         raise DatabaseError(f"Status must be one of {', '.join(STATUSES)}.")
     if (status == "unmapped") != (feast is None):
-        raise DatabaseError("Give a Cantus Index feast for exact or variant, and none for unmapped.")
-    exists = conn.execute("SELECT 1 FROM line WHERE source_id = ? AND feast = ? LIMIT 1",
-                          (source_id, heading)).fetchone()
+        raise DatabaseError(
+            "Give a Cantus Index feast for exact or variant, and none for unmapped."
+        )
+    exists = conn.execute(
+        "SELECT 1 FROM line WHERE source_id = ? AND feast = ? LIMIT 1",
+        (source_id, heading),
+    ).fetchone()
     if not exists:
         raise DatabaseError(f"No lines have the feast heading '{heading}'.")
     with conn:
@@ -110,18 +135,30 @@ def map_feast(conn: sqlite3.Connection, source_id: int, heading: str, status: st
                 status = excluded.status, note = excluded.note,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             """,
-            (source_id, heading, feast.name if feast else None,
-             feast.code if feast else None, status, note),
+            (
+                source_id,
+                heading,
+                feast.name if feast else None,
+                feast.code if feast else None,
+                status,
+                note,
+            ),
         )
 
 
-def mapped_feast_names(conn: sqlite3.Connection, source_id: int, heading: str | None,
-                       feasts: list[CIFeast] | None = None) -> set[str]:
+def mapped_feast_names(
+    conn: sqlite3.Connection,
+    source_id: int,
+    heading: str | None,
+    feasts: list[CIFeast] | None = None,
+) -> set[str]:
     """Cantus Index names (with alternatives, if the list is given) for a heading."""
     if heading is None:
         return set()
-    row = conn.execute("SELECT ci_feast FROM feast_map WHERE source_id = ? AND feast = ?",
-                       (source_id, heading)).fetchone()
+    row = conn.execute(
+        "SELECT ci_feast FROM feast_map WHERE source_id = ? AND feast = ?",
+        (source_id, heading),
+    ).fetchone()
     if row is None or row[0] is None:
         return set()
     names = {row[0]}

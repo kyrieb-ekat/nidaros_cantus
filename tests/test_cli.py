@@ -28,7 +28,9 @@ def setup(tmp_path, capsys):
 
 def line_id(path, seq):
     conn = db.connect(path)
-    return conn.execute("SELECT id FROM line WHERE origin_ref = ?", (f"master_seq {seq}",)).fetchone()[0]
+    return conn.execute(
+        "SELECT id FROM line WHERE origin_ref = ?", (f"master_seq {seq}",)
+    ).fetchone()[0]
 
 
 def test_review_commands(tmp_path, capsys):
@@ -48,8 +50,22 @@ def test_review_commands(tmp_path, capsys):
     assert "CI_VARIANT: probable parent 003290" in out
     assert "003290" in out and "suffix" in out and "concordances 1: CD 1" in out
 
-    assert main(["--db", path, "decide", str(r), "variant", "--parent", "003290",
-                 "--reason", "added phrase"]) == 0
+    assert (
+        main(
+            [
+                "--db",
+                path,
+                "decide",
+                str(r),
+                "variant",
+                "--parent",
+                "003290",
+                "--reason",
+                "added phrase",
+            ]
+        )
+        == 0
+    )
     assert main(["--db", path, "decide", str(r), "variant"]) == 1
     assert "needs the probable parent" in capsys.readouterr().err
 
@@ -69,7 +85,9 @@ def test_fetch_offline_and_genre_map(tmp_path, capsys):
     assert main(["--db", path, "fetch", "--offline", "--quiet"]) == 0
     out = capsys.readouterr().out
     assert "6 lines, 0 requests" in out
-    assert "genre HV is not mapped to Cantus Index; close matches had genre: HV (1)" in out
+    assert (
+        "genre HV is not mapped to Cantus Index; close matches had genre: HV (1)" in out
+    )
 
     assert main(["--db", path, "genre-map", "HV", "HV"]) == 0
     assert main(["--db", path, "fetch", "--offline", "--quiet"]) == 0
@@ -89,7 +107,10 @@ def test_positions_source_and_export(tmp_path, capsys):
     path = setup(tmp_path, capsys)
     assert main(["--db", path, "positions", "--list"]) == 0
     out = capsys.readouterr().out
-    assert "6 chants; 2 positions need a judgement" in out and "single psalm antiphon" in out
+    assert (
+        "6 chants; 2 positions need a judgement" in out
+        and "single psalm antiphon" in out
+    )
     assert main(["--db", path, "source", "brev", "--cdb-source-id", "123456"]) == 0
     out_csv = str(tmp_path / "import.csv")
     assert main(["--db", path, "export", out_csv]) == 1

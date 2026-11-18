@@ -29,11 +29,16 @@ def _like(pattern: str) -> re.Pattern:
 
 
 class FakeCantusIndex:
-    def __init__(self, corpus: list[dict] | None = None, chants: dict | None = None,
-                 feasts: list | None = None, failures: dict | None = None):
+    def __init__(
+        self,
+        corpus: list[dict] | None = None,
+        chants: dict | None = None,
+        feasts: list | None = None,
+        failures: dict | None = None,
+    ):
         # corpus: [{"cid", "fulltext", "genre", optional "feast", "related"}]
         self.corpus = corpus or []
-        self.chants = chants or {}          # cid -> full json-cid response
+        self.chants = chants or {}  # cid -> full json-cid response
         self.feasts = feasts
         self.failures = dict(failures or {})  # url -> list of statuses to return first
         self.urls: list[str] = []
@@ -45,9 +50,9 @@ class FakeCantusIndex:
             return pending.pop(0), "text/html", b"error"
         path = url.split("cantusindex.org/", 1)[1]
         if path.startswith("json-text/"):
-            return self._ok(self._text(unquote(path[len("json-text/"):])))
+            return self._ok(self._text(unquote(path[len("json-text/") :])))
         if path.startswith("json-cid/"):
-            cid = unquote(path[len("json-cid/"):])
+            cid = unquote(path[len("json-cid/") :])
             data = self.chants.get(cid) or self._chant(cid)
             if data is None:
                 return 404, "text/html", b"not found"
@@ -63,24 +68,46 @@ class FakeCantusIndex:
     def _text(self, query: str) -> list[dict]:
         prefix = _like(query + "%")
         contains = _like("%" + query + "%")
-        rows = sorted((c for c in self.corpus if prefix.fullmatch(c["fulltext"])),
-                      key=lambda c: c["fulltext"])[:100]
+        rows = sorted(
+            (c for c in self.corpus if prefix.fullmatch(c["fulltext"])),
+            key=lambda c: c["fulltext"],
+        )[:100]
         if len(rows) < 50:
-            more = sorted((c for c in self.corpus if contains.fullmatch(c["fulltext"])
-                           and c not in rows), key=lambda c: c["fulltext"])
+            more = sorted(
+                (
+                    c
+                    for c in self.corpus
+                    if contains.fullmatch(c["fulltext"]) and c not in rows
+                ),
+                key=lambda c: c["fulltext"],
+            )
             rows += more[:100]
-        return [{"cid": c["cid"], "fulltext": c["fulltext"], "genre": c["genre"]} for c in rows]
+        return [
+            {"cid": c["cid"], "fulltext": c["fulltext"], "genre": c["genre"]}
+            for c in rows
+        ]
 
     def _chant(self, cid: str):
         for c in self.corpus:
             if c["cid"] == cid:
                 return {
-                    "info": {"field_full_text": c["fulltext"], "field_genre": c["genre"],
-                             "field_feast": c.get("feast"),
-                             "field_related_chant_id": c.get("related"),
-                             "field_cao": None, "field_cao_concordances": None},
+                    "info": {
+                        "field_full_text": c["fulltext"],
+                        "field_genre": c["genre"],
+                        "field_feast": c.get("feast"),
+                        "field_related_chant_id": c.get("related"),
+                        "field_cao": None,
+                        "field_cao_concordances": None,
+                    },
                     "databases": {"CD": {"count": 1}},
-                    "chants": [{"db": "CD", "feast": c.get("feast"), "office": "M",
-                                "genre": c["genre"], "fulltext": c["fulltext"]}],
+                    "chants": [
+                        {
+                            "db": "CD",
+                            "feast": c.get("feast"),
+                            "office": "M",
+                            "genre": c["genre"],
+                            "fulltext": c["fulltext"],
+                        }
+                    ],
                 }
         return None

@@ -27,8 +27,8 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 BASE_URL = "https://cantusindex.org"
-RESULT_CAP = 100          # json-text returns at most this many chants
-RETRY_DELAYS = (5, 15)    # seconds to wait before each retry of a failed request
+RESULT_CAP = 100  # json-text returns at most this many chants
+RETRY_DELAYS = (5, 15)  # seconds to wait before each retry of a failed request
 
 Transport = Callable[[str], "tuple[int, str | None, bytes]"]
 
@@ -44,21 +44,38 @@ def user_agent() -> str:
 
 
 def urllib_transport(url: str, timeout: float = 30) -> tuple[int, str | None, bytes]:
-    request = Request(url, headers={"User-Agent": user_agent(), "Accept": "application/json"})
+    request = Request(
+        url, headers={"User-Agent": user_agent(), "Accept": "application/json"}
+    )
     try:
         with urlopen(request, timeout=timeout) as response:
-            return response.status, response.headers.get("Content-Type"), response.read()
+            return (
+                response.status,
+                response.headers.get("Content-Type"),
+                response.read(),
+            )
     except HTTPError as exc:
-        return exc.code, exc.headers.get("Content-Type") if exc.headers else None, exc.read()
+        return (
+            exc.code,
+            exc.headers.get("Content-Type") if exc.headers else None,
+            exc.read(),
+        )
     except (URLError, TimeoutError, OSError) as exc:
         raise CantusError(f"could not reach {url}: {exc}") from exc
 
 
 class CantusIndex:
-    def __init__(self, conn: sqlite3.Connection, *, transport: Transport | None = None,
-                 min_interval: float = 1.0, refresh: bool = False, offline: bool = False,
-                 sleep: Callable[[float], None] = time.sleep,
-                 clock: Callable[[], float] = time.monotonic):
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        transport: Transport | None = None,
+        min_interval: float = 1.0,
+        refresh: bool = False,
+        offline: bool = False,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+    ):
         self.conn = conn
         self.transport = transport or urllib_transport
         self.min_interval = min_interval
@@ -66,7 +83,7 @@ class CantusIndex:
         self.offline = offline
         self.sleep = sleep
         self.clock = clock
-        self.requests = 0                 # network requests made
+        self.requests = 0  # network requests made
         self._last_request: float | None = None
         self._refreshed: set[str] = set()  # with refresh, fetch each URL once per run
 
@@ -111,7 +128,8 @@ class CantusIndex:
 
     def _cached(self, url: str):
         return self.conn.execute(
-            "SELECT http_status, body FROM api_cache WHERE url = ?", (url,)).fetchone()
+            "SELECT http_status, body FROM api_cache WHERE url = ?", (url,)
+        ).fetchone()
 
     def _download(self, url: str) -> tuple[int, str | None, bytes]:
         """Fetch with rate limiting. 200 and 404 are answers; other codes are retried."""
@@ -128,7 +146,9 @@ class CantusIndex:
             if status in (200, 404):
                 return status, content_type, body
             last_problem = f"HTTP {status} from {url}"
-        raise CantusError(f"{last_problem} (gave up after {len(RETRY_DELAYS) + 1} attempts)")
+        raise CantusError(
+            f"{last_problem} (gave up after {len(RETRY_DELAYS) + 1} attempts)"
+        )
 
     def _wait_turn(self) -> None:
         if self._last_request is not None:
@@ -151,6 +171,7 @@ def _decode(text: str | None, url: str) -> Any:
 # --------------------------------------------------------------------------
 # Concordance evidence, read from a json-cid response
 
+
 @dataclass
 class Evidence:
     cid: str
@@ -160,8 +181,12 @@ class Evidence:
     related_cid: str | None
     cao: str | None
     cao_sigla: str | None
-    reported: dict[str, int] = field(default_factory=dict)   # per database, as Cantus Index counts
-    records: dict[str, int] = field(default_factory=dict)    # per database, records returned
+    reported: dict[str, int] = field(
+        default_factory=dict
+    )  # per database, as Cantus Index counts
+    records: dict[str, int] = field(
+        default_factory=dict
+    )  # per database, records returned
     same_feast: dict[str, int] = field(default_factory=dict)
     same_feast_office: dict[str, int] = field(default_factory=dict)
 
@@ -175,8 +200,12 @@ class Evidence:
         return sum(self.records.values())
 
 
-def evidence(cid: str, data: dict | None, feast_names: set[str] | None = None,
-             office: str | None = None) -> Evidence | None:
+def evidence(
+    cid: str,
+    data: dict | None,
+    feast_names: set[str] | None = None,
+    office: str | None = None,
+) -> Evidence | None:
     """Summarise a json-cid response for one candidate.
 
     feast_names: the Cantus Index feast name(s) mapped to the line's feast

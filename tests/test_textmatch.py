@@ -2,37 +2,69 @@ from __future__ import annotations
 
 import pytest
 
-from app.textmatch import (compare, distinctive_word, literal_query, query_words,
-                           tolerant_query, words)
+from app.textmatch import (
+    compare,
+    distinctive_word,
+    literal_query,
+    query_words,
+    tolerant_query,
+    words,
+)
 
-CI = ("Homo dei ducebatur ut crucifigerent eum populus autem clamabat voce magna "
-      "dicens innocens ejus sanguis sine causa damnatur")
-LOCAL = ("Homo dei ducebatur ut crucifigeretur populus autem clamabat voce magna "
-         "dicens innocens eius sanguis sine causa damnatur")
+CI = (
+    "Homo dei ducebatur ut crucifigerent eum populus autem clamabat voce magna "
+    "dicens innocens ejus sanguis sine causa damnatur"
+)
+LOCAL = (
+    "Homo dei ducebatur ut crucifigeretur populus autem clamabat voce magna "
+    "dicens innocens eius sanguis sine causa damnatur"
+)
 
 
 def test_normalisation_bridges_spelling():
-    assert words("Hec celi preciosa eius alleluya") == \
-        words("Haec caeli pretiosa ejus alleluia")
+    assert words("Hec celi preciosa eius alleluya") == words(
+        "Haec caeli pretiosa ejus alleluia"
+    )
     assert words("Quídam, / michi!") == ["quidam", "mihi"]
     assert words("Hæc cœli") == words("Haec coeli") == ["hec", "celi"]
 
 
-@pytest.mark.parametrize("local, ci, cls, reason_part", [
-    (LOCAL, CI, "minor", "1 word differs"),
-    ("Hec est vera fraternitas", "Haec est vera fraternitas", "identical", "apart from spelling"),
-    ("Hic est vir", "Hic est vir.", "identical", "the same"),
-    (LOCAL + " alleluia alleluia", CI, "minor", "1 word differs"),
-    ("Alleluia " + LOCAL, CI, "suffix", "begins with Alleluia"),
-    ("Ecce " + LOCAL, CI, "suffix", "opening differs (1 word)"),
-    (LOCAL, CI + " et iterum clamabant crucifige crucifige eum", "suffix",
-     "6-word phrase in the Cantus Index text only, at the end"),
-    (LOCAL, "Homo dei ducebatur ut crucifigerent eum magna turba sequebatur et mulieres flebant "
+@pytest.mark.parametrize(
+    "local, ci, cls, reason_part",
+    [
+        (LOCAL, CI, "minor", "1 word differs"),
+        (
+            "Hec est vera fraternitas",
+            "Haec est vera fraternitas",
+            "identical",
+            "apart from spelling",
+        ),
+        ("Hic est vir", "Hic est vir.", "identical", "the same"),
+        (LOCAL + " alleluia alleluia", CI, "minor", "1 word differs"),
+        ("Alleluia " + LOCAL, CI, "suffix", "begins with Alleluia"),
+        ("Ecce " + LOCAL, CI, "suffix", "opening differs (1 word)"),
+        (
+            LOCAL,
+            CI + " et iterum clamabant crucifige crucifige eum",
+            "suffix",
+            "6-word phrase in the Cantus Index text only, at the end",
+        ),
+        (
+            LOCAL,
+            "Homo dei ducebatur ut crucifigerent eum magna turba sequebatur et mulieres flebant "
             "populus autem clamabat voce magna dicens innocens ejus sanguis sine causa damnatur",
-     "suffix", "in the middle"),
-    (LOCAL, "Vidit dominus Petrum et Andream et vocavit eos", "new", "differ throughout"),
-    ("Dominus regit me", "Domine regis me", "minor", "word endings"),
-])
+            "suffix",
+            "in the middle",
+        ),
+        (
+            LOCAL,
+            "Vidit dominus Petrum et Andream et vocavit eos",
+            "new",
+            "differ throughout",
+        ),
+        ("Dominus regit me", "Domine regis me", "minor", "word endings"),
+    ],
+)
 def test_classification(local, ci, cls, reason_part):
     result = compare(local, ci)
     assert result.text_class == cls

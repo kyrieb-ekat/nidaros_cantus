@@ -16,7 +16,9 @@ from test_fetch import CORPUS
 
 
 def line_id(conn, seq):
-    return conn.execute("SELECT id FROM line WHERE origin_ref = ?", (f"master_seq {seq}",)).fetchone()[0]
+    return conn.execute(
+        "SELECT id FROM line WHERE origin_ref = ?", (f"master_seq {seq}",)
+    ).fetchone()[0]
 
 
 @pytest.fixture
@@ -46,17 +48,28 @@ def test_decisions_need_the_right_fields(fetched):
 def test_export_and_import_round_trip(fetched, tmp_path):
     conn = fetched
     r, v = line_id(conn, 4), line_id(conn, 5)
-    db.record_decision(conn, r, "Variant", parent_cid="003290",
-                       reason="9-word phrase in the Cantus Index text only, at the end")
-    db.record_decision(conn, v, "New CID", parent_cid="w00001", reason="text is a versicle there")
+    db.record_decision(
+        conn,
+        r,
+        "Variant",
+        parent_cid="003290",
+        reason="9-word phrase in the Cantus Index text only, at the end",
+    )
+    db.record_decision(
+        conn, v, "New CID", parent_cid="w00001", reason="text is a versicle there"
+    )
     db.record_decision(conn, line_id(conn, 3), "Confirm", "002588")
 
     path = tmp_path / "requests.csv"
     assert export_requests(conn, 1, path) == 2
     rows = read(path)
-    assert [(x["line_id"], x["request"], x["parent_cid"]) for x in rows] == \
-        [(str(r), "Variant", "003290"), (str(v), "New CID", "w00001")]
-    assert rows[0]["parent_text"].startswith("Iste sanctus pro lege dei sui certavit usque")
+    assert [(x["line_id"], x["request"], x["parent_cid"]) for x in rows] == [
+        (str(r), "Variant", "003290"),
+        (str(v), "New CID", "w00001"),
+    ]
+    assert rows[0]["parent_text"].startswith(
+        "Iste sanctus pro lege dei sui certavit usque"
+    )
     assert rows[0]["standardized_text"] == "Iste sanctus pro lege dei sui certavit"
     assert rows[0]["feast_status"] == "not mapped yet"
     assert rows[0]["assigned_cid"] == ""
@@ -69,11 +82,22 @@ def test_export_and_import_round_trip(fetched, tmp_path):
         writer.writerows(rows)
 
     report = import_codes(conn, path)
-    assert (report.recorded, report.already, report.blank, report.problems) == (1, 0, 1, [])
-    current = conn.execute("SELECT status, cid, parent_cid FROM current_decision WHERE line_id = ?",
-                           (r,)).fetchone()
+    assert (report.recorded, report.already, report.blank, report.problems) == (
+        1,
+        0,
+        1,
+        [],
+    )
+    current = conn.execute(
+        "SELECT status, cid, parent_cid FROM current_decision WHERE line_id = ?", (r,)
+    ).fetchone()
     assert tuple(current) == ("Fixed", "003290.1", "003290")
-    history = [x[0] for x in conn.execute("SELECT status FROM decision WHERE line_id = ? ORDER BY id", (r,))]
+    history = [
+        x[0]
+        for x in conn.execute(
+            "SELECT status FROM decision WHERE line_id = ? ORDER BY id", (r,)
+        )
+    ]
     assert history == ["Variant", "Fixed"]
 
     again = import_codes(conn, path)
@@ -92,5 +116,9 @@ def test_import_refuses_lines_not_waiting_for_a_code(fetched, tmp_path):
     report = import_codes(conn, path)
     assert report.recorded == 0
     assert report.problems and "is Confirm 002588" in report.problems[0]
-    assert conn.execute("SELECT status FROM current_decision WHERE line_id = ?", (w,)).fetchone()[0] \
+    assert (
+        conn.execute(
+            "SELECT status FROM current_decision WHERE line_id = ?", (w,)
+        ).fetchone()[0]
         == "Variant"
+    )

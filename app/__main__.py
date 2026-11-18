@@ -40,8 +40,15 @@ import textwrap
 
 from . import db
 from .cantus import CantusError, CantusIndex, evidence
-from .feasts import (STATUSES, ci_feasts, feast_headings, find_feast, map_feast,
-                     mapped_feast_names, search_feasts)
+from .feasts import (
+    STATUSES,
+    ci_feasts,
+    feast_headings,
+    find_feast,
+    map_feast,
+    mapped_feast_names,
+    search_feasts,
+)
 from .fetch import comparison_text, fetch_lines, target_lines
 from .export import export_import_file
 from .importer import import_workbook
@@ -49,16 +56,25 @@ from .positions import compute_positions, refresh_position_flags
 from .variants import export_requests, import_codes
 
 DECISION_WORDS = {
-    "confirm": "Confirm", "reject": "Reject", "fixed": "Fixed",
-    "variant": "Variant", "new-cid": "New CID",
+    "confirm": "Confirm",
+    "reject": "Reject",
+    "fixed": "Fixed",
+    "variant": "Variant",
+    "new-cid": "New CID",
 }
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m app", description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--db", default=str(db.DEFAULT_DB),
-                        help=f"database file (default: {db.DEFAULT_DB})")
+    parser = argparse.ArgumentParser(
+        prog="python -m app",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--db",
+        default=str(db.DEFAULT_DB),
+        help=f"database file (default: {db.DEFAULT_DB})",
+    )
     sub = parser.add_subparsers(dest="command", required=True, metavar="command")
 
     sub.add_parser("init", help="create a new, empty database")
@@ -68,7 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("siglum", help="short key, e.g. brev")
     p.add_argument("title", help='e.g. "Breviarium Nidrosiense"')
     p.add_argument("--edition", help="edition the text is taken from")
-    p.add_argument("--cdb-source-id", type=int, help="Cantus Database source ID, once known")
+    p.add_argument(
+        "--cdb-source-id", type=int, help="Cantus Database source ID, once known"
+    )
 
     p = sub.add_parser("source", help="update a book")
     p.add_argument("siglum")
@@ -80,7 +98,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("workbook")
     p.add_argument("--source", required=True, help="siglum of the book")
 
-    p = sub.add_parser("feasts", help="list feast headings, or search Cantus Index feasts")
+    p = sub.add_parser(
+        "feasts", help="list feast headings, or search Cantus Index feasts"
+    )
     p.add_argument("--source", help="siglum (optional when there is only one book)")
     p.add_argument("--search", metavar="TERM", help="search Cantus Index feast names")
     p.add_argument("--refresh", action="store_true", help="fetch the feast list again")
@@ -89,13 +109,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("heading", help="the feast heading exactly as in the book")
     target = p.add_mutually_exclusive_group(required=True)
     target.add_argument("--ci", metavar="NAME", help="Cantus Index feast name")
-    target.add_argument("--unmapped", action="store_true", help="no Cantus Index feast fits")
-    p.add_argument("--variant", action="store_true",
-                   help="the Cantus Index feast is the closest, not an exact match")
+    target.add_argument(
+        "--unmapped", action="store_true", help="no Cantus Index feast fits"
+    )
+    p.add_argument(
+        "--variant",
+        action="store_true",
+        help="the Cantus Index feast is the closest, not an exact match",
+    )
     p.add_argument("--note")
     p.add_argument("--source")
 
-    p = sub.add_parser("genre-map", help="set the Cantus Index genre code(s) for a local genre")
+    p = sub.add_parser(
+        "genre-map", help="set the Cantus Index genre code(s) for a local genre"
+    )
     p.add_argument("genre", help="local genre code, e.g. HV")
     p.add_argument("ci_genre", nargs="?", help="Cantus Index code(s), comma-separated")
     p.add_argument("--clear", action="store_true", help="mark as not confirmed")
@@ -103,10 +130,23 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("fetch", help="look up Cantus Index candidates")
     p.add_argument("--source")
     p.add_argument("--feast", help="only this feast heading")
-    p.add_argument("--line", type=int, action="append", metavar="ID", help="only this line (repeatable)")
-    p.add_argument("--refresh", action="store_true", help="ignore the cache and fetch again")
+    p.add_argument(
+        "--line",
+        type=int,
+        action="append",
+        metavar="ID",
+        help="only this line (repeatable)",
+    )
+    p.add_argument(
+        "--refresh", action="store_true", help="ignore the cache and fetch again"
+    )
     p.add_argument("--offline", action="store_true", help="use only cached responses")
-    p.add_argument("--interval", type=float, default=1.0, help="seconds between requests (default 1)")
+    p.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="seconds between requests (default 1)",
+    )
     p.add_argument("--quiet", action="store_true", help="no per-line progress")
 
     p = sub.add_parser("edit", help="change one field of one or more lines")
@@ -118,9 +158,18 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("split-feast", help="move lines to a new (supplied) feast")
     p.add_argument("line_id", type=int, help="first line of the new feast")
-    p.add_argument("heading", help='the supplied heading, e.g. "[SANCTI ANDREE APOSTOLI]"')
-    p.add_argument("--note", help="note for the extra field (default: heading not printed; supplied)")
-    p.add_argument("--no-heading", action="store_true", help="do not insert a supplied heading line")
+    p.add_argument(
+        "heading", help='the supplied heading, e.g. "[SANCTI ANDREE APOSTOLI]"'
+    )
+    p.add_argument(
+        "--note",
+        help="note for the extra field (default: heading not printed; supplied)",
+    )
+    p.add_argument(
+        "--no-heading",
+        action="store_true",
+        help="do not insert a supplied heading line",
+    )
 
     p = sub.add_parser("flag", help="add, clear or reopen a flag")
     p.add_argument("line_id", type=int)
@@ -134,17 +183,24 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="open the review screen in your browser")
     p.add_argument("--source")
     p.add_argument("--port", type=int, default=5000)
-    p.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    p.add_argument(
+        "--no-browser", action="store_true", help="do not open a browser window"
+    )
 
-    p = sub.add_parser("positions", help="recompute positions; flag those needing a judgement")
+    p = sub.add_parser(
+        "positions", help="recompute positions; flag those needing a judgement"
+    )
     p.add_argument("--source")
     p.add_argument("--list", action="store_true", help="list the lines to check")
 
     p = sub.add_parser("export", help="write the Cantus Database import CSV")
     p.add_argument("path")
     p.add_argument("--source")
-    p.add_argument("--allow-unmapped", action="store_true",
-                   help="export even if some headings have no Cantus feast (printed heading used)")
+    p.add_argument(
+        "--allow-unmapped",
+        action="store_true",
+        help="export even if some headings have no Cantus feast (printed heading used)",
+    )
 
     p = sub.add_parser("status", help="show counts")
     p.add_argument("--source", help="limit to one book")
@@ -156,11 +212,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("line_id", type=int)
     p.add_argument("decision", choices=list(DECISION_WORDS))
     p.add_argument("cid", nargs="?", help="Cantus ID (confirm, fixed)")
-    p.add_argument("--parent", help="probable parent Cantus ID (variant; optional for new-cid)")
+    p.add_argument(
+        "--parent", help="probable parent Cantus ID (variant; optional for new-cid)"
+    )
     p.add_argument("--reason", help="why (variant, new-cid)")
     p.add_argument("--note")
 
-    p = sub.add_parser("export-requests", help="write Variant and New CID lines to a CSV")
+    p = sub.add_parser(
+        "export-requests", help="write Variant and New CID lines to a CSV"
+    )
     p.add_argument("path")
     p.add_argument("--source")
 
@@ -181,31 +241,42 @@ def main(argv: list[str] | None = None) -> int:
 # --------------------------------------------------------------------------
 # Helpers
 
+
 def _source(conn, siglum: str | None):
     if siglum:
-        row = conn.execute("SELECT * FROM source WHERE siglum = ?", (siglum,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM source WHERE siglum = ?", (siglum,)
+        ).fetchone()
         if row is None:
             raise db.DatabaseError(f"No source '{siglum}'.")
         return row
     rows = conn.execute("SELECT * FROM source").fetchall()
     if len(rows) != 1:
-        raise db.DatabaseError("Several books are registered; choose one with --source." if rows
-                               else "No books yet; add one with `python -m app add-source`.")
+        raise db.DatabaseError(
+            "Several books are registered; choose one with --source."
+            if rows
+            else "No books yet; add one with `python -m app add-source`."
+        )
     return rows[0]
 
 
 def _short(text: str | None, width: int) -> str:
     text = " ".join((text or "").split())
-    return text if len(text) <= width else text[:width - 1] + "…"
+    return text if len(text) <= width else text[: width - 1] + "…"
 
 
 def _wrap(text: str | None, indent: str = "    ") -> str:
-    return textwrap.fill(" ".join((text or "").split()), width=88,
-                         initial_indent=indent, subsequent_indent=indent)
+    return textwrap.fill(
+        " ".join((text or "").split()),
+        width=88,
+        initial_indent=indent,
+        subsequent_indent=indent,
+    )
 
 
 # --------------------------------------------------------------------------
 # Setting up
+
 
 def cmd_init(args) -> int:
     db.init(args.db)
@@ -216,8 +287,10 @@ def cmd_init(args) -> int:
 def cmd_migrate(args) -> int:
     applied = db.migrate(args.db)
     if applied:
-        print(f"Migrated {args.db} to schema version {applied[-1]} "
-              f"(applied {', '.join(map(str, applied))}).")
+        print(
+            f"Migrated {args.db} to schema version {applied[-1]} "
+            f"(applied {', '.join(map(str, applied))})."
+        )
     else:
         print(f"{args.db} is already at schema version {db.SCHEMA_VERSION}.")
     return 0
@@ -226,7 +299,9 @@ def cmd_migrate(args) -> int:
 def cmd_add_source(args) -> int:
     conn = db.connect(args.db)
     with conn:
-        if conn.execute("SELECT 1 FROM source WHERE siglum = ?", (args.siglum,)).fetchone():
+        if conn.execute(
+            "SELECT 1 FROM source WHERE siglum = ?", (args.siglum,)
+        ).fetchone():
             raise db.DatabaseError(f"Source '{args.siglum}' already exists.")
         conn.execute(
             "INSERT INTO source (siglum, title, edition, cdb_source_id) VALUES (?, ?, ?, ?)",
@@ -238,13 +313,25 @@ def cmd_add_source(args) -> int:
 
 def cmd_source(args) -> int:
     conn = db.connect(args.db)
-    changes = {k: v for k, v in (("cdb_source_id", args.cdb_source_id), ("title", args.title),
-                                 ("edition", args.edition)) if v is not None}
+    changes = {
+        k: v
+        for k, v in (
+            ("cdb_source_id", args.cdb_source_id),
+            ("title", args.title),
+            ("edition", args.edition),
+        )
+        if v is not None
+    }
     if not changes:
-        raise db.DatabaseError("Nothing to change; give --cdb-source-id, --title or --edition.")
+        raise db.DatabaseError(
+            "Nothing to change; give --cdb-source-id, --title or --edition."
+        )
     with conn:
-        n = conn.execute(f"UPDATE source SET {', '.join(f'{k} = ?' for k in changes)} "
-                         "WHERE siglum = ?", (*changes.values(), args.siglum)).rowcount
+        n = conn.execute(
+            f"UPDATE source SET {', '.join(f'{k} = ?' for k in changes)} "
+            "WHERE siglum = ?",
+            (*changes.values(), args.siglum),
+        ).rowcount
     if not n:
         raise db.DatabaseError(f"No source '{args.siglum}'.")
     print(f"{args.siglum}: " + ", ".join(f"{k} = {v}" for k, v in changes.items()))
@@ -254,7 +341,9 @@ def cmd_source(args) -> int:
 def cmd_import(args) -> int:
     conn = db.connect(args.db)
     report = import_workbook(conn, args.workbook, args.source)
-    print(f"Imported batch {report.batch_id}: pages {report.pages[0]}-{report.pages[1]}")
+    print(
+        f"Imported batch {report.batch_id}: pages {report.pages[0]}-{report.pages[1]}"
+    )
     print(f"  lines           {report.lines}")
     print(f"  import rows     {report.import_rows}")
     print(f"  flags           {report.flags}")
@@ -262,9 +351,13 @@ def cmd_import(args) -> int:
     print(f"  spot-checks     {report.spot_checks}")
     print(f"  CID candidates  {report.candidates}")
     print(f"  CID decisions   {report.decisions}")
-    print("  derived values (incipit, position, in_import, import_seq) match the workbook")
+    print(
+        "  derived values (incipit, position, in_import, import_seq) match the workbook"
+    )
     if report.new_flag_types:
-        print("  flag codes not in the README legend: " + ", ".join(report.new_flag_types))
+        print(
+            "  flag codes not in the README legend: " + ", ".join(report.new_flag_types)
+        )
     for warning in report.warnings:
         print(f"  warning: {warning}")
     return 0
@@ -272,6 +365,7 @@ def cmd_import(args) -> int:
 
 # --------------------------------------------------------------------------
 # Cantus Index
+
 
 def cmd_feasts(args) -> int:
     conn = db.connect(args.db)
@@ -282,7 +376,9 @@ def cmd_feasts(args) -> int:
             print(f"No Cantus Index feast matches '{args.search}'.")
         for feast in hits[:40]:
             alts = f"  (also: {', '.join(feast.alt_names)})" if feast.alt_names else ""
-            print(f"  {feast.name:<32} {feast.code or '':<10} {feast.date or '':<8}{alts}")
+            print(
+                f"  {feast.name:<32} {feast.code or '':<10} {feast.date or '':<8}{alts}"
+            )
             if feast.description:
                 print(_wrap(feast.description, "      "))
         if len(hits) > 40:
@@ -298,13 +394,19 @@ def cmd_feasts(args) -> int:
         if row["status"]:
             counts[row["status"]] += 1
             mapping = row["ci_feast"] or "(no Cantus Index feast)"
-            print(f"  p.{row['first_page']:<5} {_short(row['feast'], 46):<47} "
-                  f"{row['status']:<9} {mapping}")
+            print(
+                f"  p.{row['first_page']:<5} {_short(row['feast'], 46):<47} "
+                f"{row['status']:<9} {mapping}"
+            )
         else:
             unmapped += 1
-            print(f"  p.{row['first_page']:<5} {_short(row['feast'], 46):<47} not mapped")
-    print(f"{source['siglum']}: exact {counts['exact']}, variant {counts['variant']}, "
-          f"unmapped {counts['unmapped']}, not yet mapped {unmapped}")
+            print(
+                f"  p.{row['first_page']:<5} {_short(row['feast'], 46):<47} not mapped"
+            )
+    print(
+        f"{source['siglum']}: exact {counts['exact']}, variant {counts['variant']}, "
+        f"unmapped {counts['unmapped']}, not yet mapped {unmapped}"
+    )
     return 0
 
 
@@ -328,13 +430,20 @@ def cmd_genre_map(args) -> int:
     conn = db.connect(args.db)
     if args.clear == bool(args.ci_genre):
         raise db.DatabaseError("Give Cantus Index genre code(s), or --clear.")
-    value = None if args.clear else ",".join(g.strip() for g in args.ci_genre.split(",") if g.strip())
+    value = (
+        None
+        if args.clear
+        else ",".join(g.strip() for g in args.ci_genre.split(",") if g.strip())
+    )
     with conn:
-        changed = conn.execute("UPDATE genre SET ci_genre = ? WHERE code = ?",
-                               (value, args.genre)).rowcount
+        changed = conn.execute(
+            "UPDATE genre SET ci_genre = ? WHERE code = ?", (value, args.genre)
+        ).rowcount
     if not changed:
         raise db.DatabaseError(f"No local genre '{args.genre}'.")
-    print(f"{args.genre} -> {value or 'not confirmed'}. Run `fetch --offline` to re-rank from the cache.")
+    print(
+        f"{args.genre} -> {value or 'not confirmed'}. Run `fetch --offline` to re-rank from the cache."
+    )
     return 0
 
 
@@ -345,20 +454,25 @@ def cmd_fetch(args) -> int:
     if not lines:
         print("No matching lines.")
         return 1
-    client = CantusIndex(conn, min_interval=args.interval, refresh=args.refresh,
-                         offline=args.offline)
+    client = CantusIndex(
+        conn, min_interval=args.interval, refresh=args.refresh, offline=args.offline
+    )
 
     def progress(i, n, line, result):
         if args.quiet:
             return
-        head = f"[{i}/{n}] line {line['id']} p.{line['page_start']} {line['genre']:<3} " \
-               f"{_short(line['fulltext_standardized'], 34):<35}"
+        head = (
+            f"[{i}/{n}] line {line['id']} p.{line['page_start']} {line['genre']:<3} "
+            f"{_short(line['fulltext_standardized'], 34):<35}"
+        )
         if result.error:
             print(f"{head} ! {result.error}")
             return
         best = result.best
         found = f"{best.cid} {best.comparison.text_class}" if best else "no results"
-        flags = f"  [{', '.join(code for code, _ in result.flags)}]" if result.flags else ""
+        flags = (
+            f"  [{', '.join(code for code, _ in result.flags)}]" if result.flags else ""
+        )
         print(f"{head} -> {found}{flags}")
 
     summary = fetch_lines(conn, client, lines, progress)
@@ -367,9 +481,13 @@ def cmd_fetch(args) -> int:
         print(f"  {code:<20} {n}")
     for genre, seen in summary.unconfirmed_genres.items():
         found = ", ".join(f"{g} ({n})" for g, n in seen.most_common()) or "none yet"
-        print(f"  genre {genre} is not mapped to Cantus Index; close matches had genre: {found}")
+        print(
+            f"  genre {genre} is not mapped to Cantus Index; close matches had genre: {found}"
+        )
     if summary.errors:
-        print(f"  {len(summary.errors)} lines failed; run the same command again to retry them:")
+        print(
+            f"  {len(summary.errors)} lines failed; run the same command again to retry them:"
+        )
         for line_id, error in summary.errors[:10]:
             print(f"    line {line_id}: {error}")
     return 0 if not summary.errors else 2
@@ -377,6 +495,7 @@ def cmd_fetch(args) -> int:
 
 # --------------------------------------------------------------------------
 # Reviewing
+
 
 def _line_ids(text: str) -> list[int]:
     ids: list[int] = []
@@ -402,25 +521,32 @@ def cmd_edit(args) -> int:
     value = db.parse_value(args.field, None if args.clear else args.value)
     ids = _line_ids(args.lines)
     changed = sum(db.update_line(conn, i, args.field, value, args.note) for i in ids)
-    print(f"{args.field}: changed {changed} of {len(ids)} line{'s' if len(ids) != 1 else ''}"
-          f"{' (the rest already had that value)' if changed < len(ids) else ''}.")
+    print(
+        f"{args.field}: changed {changed} of {len(ids)} line{'s' if len(ids) != 1 else ''}"
+        f"{' (the rest already had that value)' if changed < len(ids) else ''}."
+    )
     return 0
 
 
 def cmd_split_feast(args) -> int:
     conn = db.connect(args.db)
-    moved, heading_id = db.split_feast(conn, args.line_id, args.heading, args.note,
-                                       heading=not args.no_heading)
-    print(f"Moved {moved} lines to '{args.heading}'"
-          f"{f'; supplied heading is line {heading_id}' if heading_id else ''}. "
-          "Map it with `python -m app map-feast`.")
+    moved, heading_id = db.split_feast(
+        conn, args.line_id, args.heading, args.note, heading=not args.no_heading
+    )
+    print(
+        f"Moved {moved} lines to '{args.heading}'"
+        f"{f'; supplied heading is line {heading_id}' if heading_id else ''}. "
+        "Map it with `python -m app map-feast`."
+    )
     return 0
 
 
 def cmd_flag(args) -> int:
     conn = db.connect(args.db)
     db.set_flag(conn, args.line_id, args.code, args.action, args.note)
-    print(f"line {args.line_id}: {args.code} {dict(add='added', clear='cleared', reopen='reopened')[args.action]}")
+    print(
+        f"line {args.line_id}: {args.code} {dict(add='added', clear='cleared', reopen='reopened')[args.action]}"
+    )
     return 0
 
 
@@ -448,18 +574,31 @@ def cmd_positions(args) -> int:
     source = _source(conn, args.source)
     positions = refresh_position_flags(conn, source["id"])
     checks = {i: p for i, p in positions.items() if p.check}
-    print(f"{len(positions)} chants; {len(checks)} positions need a judgement (flag POSITION_CHECK).")
+    print(
+        f"{len(positions)} chants; {len(checks)} positions need a judgement (flag POSITION_CHECK)."
+    )
     reasons = Counter(p.check.split(":")[0].split(";")[0] for p in checks.values())
     for reason, n in reasons.most_common():
         print(f"  {n:>4}  {reason}")
     if args.list and checks:
-        rows = {r["id"]: r for r in conn.execute(
-            f"SELECT * FROM line WHERE id IN ({', '.join('?' for _ in checks)})", tuple(checks))}
-        for i in sorted(checks, key=lambda i: (rows[i]["page_start"], rows[i]["line_on_page"])):
+        rows = {
+            r["id"]: r
+            for r in conn.execute(
+                f"SELECT * FROM line WHERE id IN ({', '.join('?' for _ in checks)})",
+                tuple(checks),
+            )
+        }
+        for i in sorted(
+            checks, key=lambda i: (rows[i]["page_start"], rows[i]["line_on_page"])
+        ):
             r, p = rows[i], checks[i]
-            print(f"  line {i:<5} p.{r['page_start']} {r['office'] or '-':<3} {r['genre']:<3} "
-                  f"{p.value or '(blank)':<6} {_short(r['fulltext_standardized'], 30):<31} {p.check}")
-    print("Set a position by hand with `python -m app edit LINE position_override VALUE`.")
+            print(
+                f"  line {i:<5} p.{r['page_start']} {r['office'] or '-':<3} {r['genre']:<3} "
+                f"{p.value or '(blank)':<6} {_short(r['fulltext_standardized'], 30):<31} {p.check}"
+            )
+    print(
+        "Set a position by hand with `python -m app edit LINE position_override VALUE`."
+    )
     return 0
 
 
@@ -475,27 +614,43 @@ def cmd_export(args) -> int:
     print(f"  positions to check       {report.position_checks}")
     print(f"  lines with open flags    {report.open_flags}")
     if report.unmapped:
-        print("  headings without a Cantus feast (printed heading used): " + "; ".join(report.unmapped))
+        print(
+            "  headings without a Cantus feast (printed heading used): "
+            + "; ".join(report.unmapped)
+        )
     if not source["cdb_source_id"]:
-        print("  source_id is blank: set it with `python -m app source "
-              f"{source['siglum']} --cdb-source-id N`.")
+        print(
+            "  source_id is blank: set it with `python -m app source "
+            f"{source['siglum']} --cdb-source-id N`."
+        )
     return 0
 
 
 def cmd_show(args) -> int:
     conn = db.connect(args.db)
-    line = conn.execute("SELECT * FROM line_export WHERE id = ?", (args.line_id,)).fetchone()
+    line = conn.execute(
+        "SELECT * FROM line_export WHERE id = ?", (args.line_id,)
+    ).fetchone()
     if line is None:
         raise db.DatabaseError(f"No line with id {args.line_id}.")
-    mapping = conn.execute("SELECT ci_feast, status FROM feast_map WHERE source_id = ? AND feast = ?",
-                           (line["source_id"], line["feast"])).fetchone()
-    feast_note = f" -> {mapping['ci_feast'] or '(none)'} ({mapping['status']})" if mapping \
+    mapping = conn.execute(
+        "SELECT ci_feast, status FROM feast_map WHERE source_id = ? AND feast = ?",
+        (line["source_id"], line["feast"]),
+    ).fetchone()
+    feast_note = (
+        f" -> {mapping['ci_feast'] or '(none)'} ({mapping['status']})"
+        if mapping
         else " (not mapped)"
+    )
     cdb = compute_positions(conn, line["source_id"]).get(line["id"])
-    cdb_text = "-" if cdb is None else (cdb.value or "(blank)") + (" ?" if cdb.check else "")
-    print(f"line {line['id']}  p.{line['page_start']} {line['signature_leaf'] or ''}  "
-          f"{line['row_type']}  genre {line['genre'] or '-'}  office {line['office'] or '-'}  "
-          f"position {cdb_text}")
+    cdb_text = (
+        "-" if cdb is None else (cdb.value or "(blank)") + (" ?" if cdb.check else "")
+    )
+    print(
+        f"line {line['id']}  p.{line['page_start']} {line['signature_leaf'] or ''}  "
+        f"{line['row_type']}  genre {line['genre'] or '-'}  office {line['office'] or '-'}  "
+        f"position {cdb_text}"
+    )
     print(f"feast: {line['feast']}{feast_note}")
     if line["rubric"] or line["extra_note"]:
         extra = " | ".join(x for x in (line["rubric"], line["extra_note"]) if x)
@@ -507,26 +662,38 @@ def cmd_show(args) -> int:
         print("compared with:")
         print(_wrap(text))
 
-    flags = conn.execute("SELECT code, status, note FROM flag WHERE line_id = ? ORDER BY ord",
-                         (line["id"],)).fetchall()
+    flags = conn.execute(
+        "SELECT code, status, note FROM flag WHERE line_id = ? ORDER BY ord",
+        (line["id"],),
+    ).fetchall()
     if flags:
         print("flags:")
         for f in flags:
-            print(f"  {f['code']}{' (cleared)' if f['status'] == 'cleared' else ''}"
-                  f"{': ' + f['note'] if f['note'] else ''}")
+            print(
+                f"  {f['code']}{' (cleared)' if f['status'] == 'cleared' else ''}"
+                f"{': ' + f['note'] if f['note'] else ''}"
+            )
 
-    decision = conn.execute("SELECT * FROM current_decision WHERE line_id = ?", (line["id"],)).fetchone()
+    decision = conn.execute(
+        "SELECT * FROM current_decision WHERE line_id = ?", (line["id"],)
+    ).fetchone()
     if decision:
-        extra = " ".join(x for x in (decision["cid"],
-                                     f"parent {decision['parent_cid']}" if decision["parent_cid"] else None,
-                                     f"- {decision['reason']}" if decision["reason"] else None) if x)
+        extra = " ".join(
+            x
+            for x in (
+                decision["cid"],
+                f"parent {decision['parent_cid']}" if decision["parent_cid"] else None,
+                f"- {decision['reason']}" if decision["reason"] else None,
+            )
+            if x
+        )
         print(f"decision: {decision['status']} {extra}  ({decision['decided_at']})")
 
-    candidates = conn.execute("SELECT * FROM candidate WHERE line_id = ? ORDER BY method, rank",
-                              (line["id"],)).fetchall()
+    candidates = conn.execute(
+        "SELECT * FROM candidate WHERE line_id = ? ORDER BY method, rank", (line["id"],)
+    ).fetchall()
     if not candidates:
-        print("no candidates yet (run `python -m app fetch --line "
-              f"{line['id']}`)")
+        print("no candidates yet (run `python -m app fetch --line " f"{line['id']}`)")
         return 0
     cache = CantusIndex(conn, offline=True)
     try:
@@ -536,22 +703,32 @@ def cmd_show(args) -> int:
     names = mapped_feast_names(conn, line["source_id"], line["feast"], known_feasts)
     print("candidates:")
     for c in candidates:
-        print(f"  {c['rank']:>2}. {c['cid']:<12} genre {c['cand_genre'] or '?':<4} "
-              f"{c['text_class'] or '-':<10} {c['score'] or 0:.2f}  {c['class_reason'] or ''}")
+        print(
+            f"  {c['rank']:>2}. {c['cid']:<12} genre {c['cand_genre'] or '?':<4} "
+            f"{c['text_class'] or '-':<10} {c['score'] or 0:.2f}  {c['class_reason'] or ''}"
+        )
         print(_wrap(c["cand_text"], "        "))
         try:
             ev = evidence(c["cid"], cache.chant(c["cid"]), names, line["office"])
         except CantusError:
             ev = None
         if ev:
-            dbs = ", ".join(f"{k} {v}" for k, v in sorted(ev.records.items(), key=lambda kv: -kv[1]))
-            print(f"        Cantus Index feast: {ev.ci_feast or '-'};  CAO {ev.cao or '-'} "
-                  f"{ev.cao_sigla or ''}")
-            print(f"        concordances {ev.total}: {dbs}"
-                  f"{'' if ev.complete else '  (incomplete: Cantus Index reports more)'}")
+            dbs = ", ".join(
+                f"{k} {v}" for k, v in sorted(ev.records.items(), key=lambda kv: -kv[1])
+            )
+            print(
+                f"        Cantus Index feast: {ev.ci_feast or '-'};  CAO {ev.cao or '-'} "
+                f"{ev.cao_sigla or ''}"
+            )
+            print(
+                f"        concordances {ev.total}: {dbs}"
+                f"{'' if ev.complete else '  (incomplete: Cantus Index reports more)'}"
+            )
             if names:
-                print(f"        same feast {sum(ev.same_feast.values())}, "
-                      f"same feast and office {sum(ev.same_feast_office.values())}")
+                print(
+                    f"        same feast {sum(ev.same_feast.values())}, "
+                    f"same feast and office {sum(ev.same_feast_office.values())}"
+                )
             if ev.related_cid:
                 print(f"        related to {ev.related_cid}")
     return 0
@@ -560,8 +737,15 @@ def cmd_show(args) -> int:
 def cmd_decide(args) -> int:
     conn = db.connect(args.db)
     status = DECISION_WORDS[args.decision]
-    db.record_decision(conn, args.line_id, status, args.cid, args.note,
-                       parent_cid=args.parent, reason=args.reason)
+    db.record_decision(
+        conn,
+        args.line_id,
+        status,
+        args.cid,
+        args.note,
+        parent_cid=args.parent,
+        reason=args.reason,
+    )
     detail = args.cid or (f"parent {args.parent}" if args.parent else "")
     print(f"line {args.line_id}: {status} {detail}".rstrip())
     return 0
@@ -571,8 +755,10 @@ def cmd_export_requests(args) -> int:
     conn = db.connect(args.db)
     source = _source(conn, args.source)
     n = export_requests(conn, source["id"], args.path)
-    print(f"Wrote {n} request{'s' if n != 1 else ''} to {args.path}. "
-          "Fill in assigned_cid, then run `python -m app import-codes` on the same file.")
+    print(
+        f"Wrote {n} request{'s' if n != 1 else ''} to {args.path}. "
+        "Fill in assigned_cid, then run `python -m app import-codes` on the same file."
+    )
     return 0
 
 
@@ -584,8 +770,10 @@ def cmd_import_codes(args) -> int:
         for problem in report.problems:
             print(f"  {problem}")
         return 1
-    print(f"Recorded {report.recorded} assigned Cantus IDs "
-          f"({report.already} already recorded, {report.blank} rows still blank).")
+    print(
+        f"Recorded {report.recorded} assigned Cantus IDs "
+        f"({report.already} already recorded, {report.blank} rows still blank)."
+    )
     return 0
 
 
@@ -596,7 +784,9 @@ def cmd_status(args) -> int:
         (args.source, args.source),
     ).fetchall()
     if not sources:
-        print("No sources yet." if args.source is None else f"No source '{args.source}'.")
+        print(
+            "No sources yet." if args.source is None else f"No source '{args.source}'."
+        )
         return 0 if args.source is None else 1
     for src in sources:
         _print_status(conn, src)
@@ -619,44 +809,68 @@ def _print_status(conn, src) -> None:
 
     print(f"{src['siglum']}: {src['title']}")
     for b in conn.execute(
-            "SELECT id, file_name, page_first, page_last, line_count FROM import_batch "
-            "WHERE source_id = ? ORDER BY page_first", (sid,)):
-        print(f"  batch {b['id']}: {b['file_name']} (pp. {b['page_first']}-{b['page_last']}, "
-              f"{b['line_count']} lines)")
+        "SELECT id, file_name, page_first, page_last, line_count FROM import_batch "
+        "WHERE source_id = ? ORDER BY page_first",
+        (sid,),
+    ):
+        print(
+            f"  batch {b['id']}: {b['file_name']} (pp. {b['page_first']}-{b['page_last']}, "
+            f"{b['line_count']} lines)"
+        )
     all_lines = one("SELECT COUNT(*) FROM line WHERE source_id = ?")
-    import_rows = one("SELECT COUNT(*) FROM line_export WHERE source_id = ? AND in_import = 1")
-    open_flag_lines = one("SELECT COUNT(DISTINCT f.line_id) FROM flag f "
-                          "JOIN line l ON l.id = f.line_id "
-                          "WHERE l.source_id = ? AND f.status = 'open'")
-    looked_up = one("SELECT COUNT(DISTINCT c.line_id) FROM candidate c JOIN line l ON l.id = c.line_id "
-                    "WHERE l.source_id = ? AND c.method = 'ci_text'")
+    import_rows = one(
+        "SELECT COUNT(*) FROM line_export WHERE source_id = ? AND in_import = 1"
+    )
+    open_flag_lines = one(
+        "SELECT COUNT(DISTINCT f.line_id) FROM flag f "
+        "JOIN line l ON l.id = f.line_id "
+        "WHERE l.source_id = ? AND f.status = 'open'"
+    )
+    looked_up = one(
+        "SELECT COUNT(DISTINCT c.line_id) FROM candidate c JOIN line l ON l.id = c.line_id "
+        "WHERE l.source_id = ? AND c.method = 'ci_text'"
+    )
     print(f"  {'all lines':<28}{all_lines}")
     print(f"  {'import rows':<28}{import_rows}")
     print(f"  {'lines with an open flag':<28}{open_flag_lines}")
     print(f"  {'looked up in Cantus Index':<28}{looked_up}")
-    table("lines by genre",
-          "SELECT genre, COUNT(*) FROM line WHERE source_id = ? AND genre IS NOT NULL "
-          "GROUP BY genre ORDER BY COUNT(*) DESC")
-    table("import rows by office",
-          "SELECT office, COUNT(*) FROM line_export WHERE source_id = ? AND in_import = 1 "
-          "GROUP BY office ORDER BY COUNT(*) DESC")
-    table("feast headings by mapping",
-          "SELECT COALESCE(m.status, 'not mapped'), COUNT(*) FROM "
-          "(SELECT DISTINCT source_id, feast FROM line WHERE source_id = ? AND feast IS NOT NULL) h "
-          "LEFT JOIN feast_map m ON m.source_id = h.source_id AND m.feast = h.feast "
-          "GROUP BY 1 ORDER BY 1")
-    table("open flags",
-          "SELECT f.code, COUNT(*) FROM flag f JOIN line l ON l.id = f.line_id "
-          "WHERE l.source_id = ? AND f.status = 'open' GROUP BY f.code ORDER BY COUNT(*) DESC")
-    table("links",
-          "SELECT k.kind, COUNT(*) FROM line_link k JOIN line l ON l.id = k.from_line "
-          "WHERE l.source_id = ? GROUP BY k.kind ORDER BY k.kind")
-    table("spot-check",
-          "SELECT s.status, COUNT(*) FROM spot_check s JOIN line l ON l.id = s.line_id "
-          "WHERE l.source_id = ? GROUP BY s.status ORDER BY s.status")
-    table("CID decisions (current)",
-          "SELECT d.status, COUNT(*) FROM current_decision d JOIN line l ON l.id = d.line_id "
-          "WHERE l.source_id = ? GROUP BY d.status ORDER BY d.status")
+    table(
+        "lines by genre",
+        "SELECT genre, COUNT(*) FROM line WHERE source_id = ? AND genre IS NOT NULL "
+        "GROUP BY genre ORDER BY COUNT(*) DESC",
+    )
+    table(
+        "import rows by office",
+        "SELECT office, COUNT(*) FROM line_export WHERE source_id = ? AND in_import = 1 "
+        "GROUP BY office ORDER BY COUNT(*) DESC",
+    )
+    table(
+        "feast headings by mapping",
+        "SELECT COALESCE(m.status, 'not mapped'), COUNT(*) FROM "
+        "(SELECT DISTINCT source_id, feast FROM line WHERE source_id = ? AND feast IS NOT NULL) h "
+        "LEFT JOIN feast_map m ON m.source_id = h.source_id AND m.feast = h.feast "
+        "GROUP BY 1 ORDER BY 1",
+    )
+    table(
+        "open flags",
+        "SELECT f.code, COUNT(*) FROM flag f JOIN line l ON l.id = f.line_id "
+        "WHERE l.source_id = ? AND f.status = 'open' GROUP BY f.code ORDER BY COUNT(*) DESC",
+    )
+    table(
+        "links",
+        "SELECT k.kind, COUNT(*) FROM line_link k JOIN line l ON l.id = k.from_line "
+        "WHERE l.source_id = ? GROUP BY k.kind ORDER BY k.kind",
+    )
+    table(
+        "spot-check",
+        "SELECT s.status, COUNT(*) FROM spot_check s JOIN line l ON l.id = s.line_id "
+        "WHERE l.source_id = ? GROUP BY s.status ORDER BY s.status",
+    )
+    table(
+        "CID decisions (current)",
+        "SELECT d.status, COUNT(*) FROM current_decision d JOIN line l ON l.id = d.line_id "
+        "WHERE l.source_id = ? GROUP BY d.status ORDER BY d.status",
+    )
 
 
 COMMANDS = {

@@ -36,8 +36,12 @@ from dataclasses import dataclass
 from .db import refresh_flags
 
 CANTICLE_OFFICES = {"L": "B", "V": "M", "V2": "M", "C": "N"}
-CANTICLE_SLOTS = {"ad magnificat": "M", "ad benedictus": "B", "ad nunc dimittis": "N",
-                  "in evangelio": None}            # None: the office's own canticle
+CANTICLE_SLOTS = {
+    "ad magnificat": "M",
+    "ad benedictus": "B",
+    "ad nunc dimittis": "N",
+    "in evangelio": None,
+}  # None: the office's own canticle
 CANTICLE_CUES = (("magnificat", "M"), ("benedictus", "B"), ("nunc dimittis", "N"))
 SERIES_RUBRIC = re.compile(r"\b(cum\s+ceteris|et\s+reliqu|ceter|reliqu)", re.I)
 FLAG = "POSITION_CHECK"
@@ -46,7 +50,7 @@ FLAG = "POSITION_CHECK"
 @dataclass
 class Position:
     value: str | None
-    check: str | None = None        # why a judgement is needed, if it is
+    check: str | None = None  # why a judgement is needed, if it is
 
 
 def compute_positions(conn: sqlite3.Connection, source_id: int) -> dict[int, Position]:
@@ -54,13 +58,21 @@ def compute_positions(conn: sqlite3.Connection, source_id: int) -> dict[int, Pos
     every = conn.execute(
         "SELECT l.*, COALESCE(g.imported, 0) AS imported FROM line AS l "
         "LEFT JOIN genre AS g ON g.code = l.genre "
-        "WHERE l.source_id = ? ORDER BY l.page_start, l.line_on_page", (source_id,)).fetchall()
+        "WHERE l.source_id = ? ORDER BY l.page_start, l.line_on_page",
+        (source_id,),
+    ).fetchall()
     rows = [r for r in every if r["imported"]]
     cue_after = _canticle_cues(every)
-    verse_of = dict(conn.execute(
-        "SELECT from_line, to_line FROM line_link WHERE kind = 'verse_of'").fetchall())
-    stanza_of = dict(conn.execute(
-        "SELECT from_line, to_line FROM line_link WHERE kind = 'stanza_of'").fetchall())
+    verse_of = dict(
+        conn.execute(
+            "SELECT from_line, to_line FROM line_link WHERE kind = 'verse_of'"
+        ).fetchall()
+    )
+    stanza_of = dict(
+        conn.execute(
+            "SELECT from_line, to_line FROM line_link WHERE kind = 'stanza_of'"
+        ).fetchall()
+    )
 
     result: dict[int, Position] = {}
     groups: OrderedDict = OrderedDict()
@@ -70,7 +82,9 @@ def compute_positions(conn: sqlite3.Connection, source_id: int) -> dict[int, Pos
     for (_, office), members in groups.items():
         if not office:
             for row in members:
-                result[row["id"]] = Position(None, "no office: position cannot be determined")
+                result[row["id"]] = Position(
+                    None, "no office: position cannot be determined"
+                )
             continue
         main, memorial, verses, stanzas = [], [], [], []
         for row in members:
@@ -91,7 +105,9 @@ def compute_positions(conn: sqlite3.Connection, source_id: int) -> dict[int, Pos
             _canticle_office(main, CANTICLE_OFFICES[office], cue_after, result)
         else:
             _singletons_or_series(main, result)
-        _stanzas(main, stanzas, stanza_of, result)     # after the office rules: adds the hymn check
+        _stanzas(
+            main, stanzas, stanza_of, result
+        )  # after the office rules: adds the hymn check
 
     for row in rows:
         if row["position_override"]:
@@ -104,7 +120,9 @@ def _verses(verses, verse_of, result) -> None:
     for row in verses:
         parent = verse_of.get(row["id"])
         if parent is None:
-            result[row["id"]] = Position("01", "verse not linked to a responsory; numbered 01")
+            result[row["id"]] = Position(
+                "01", "verse not linked to a responsory; numbered 01"
+            )
             continue
         count[parent] += 1
         result[row["id"]] = Position(f"{count[parent]:02d}")
@@ -123,9 +141,12 @@ def _stanzas(main, stanzas, stanza_of, result) -> None:
     for row in main:
         if row["genre"] == "H" and row["id"] in hymns_with_stanzas:
             current = result.get(row["id"], Position(None))
-            note = "hymn stanzas numbered 02, 03 ... after the hymn; convention to confirm"
-            result[row["id"]] = Position(current.value,
-                                         f"{current.check}; {note}" if current.check else note)
+            note = (
+                "hymn stanzas numbered 02, 03 ... after the hymn; convention to confirm"
+            )
+            result[row["id"]] = Position(
+                current.value, f"{current.check}; {note}" if current.check else note
+            )
 
 
 def _by_genre(rows):
@@ -163,7 +184,7 @@ def _matins(main, result) -> None:
             last_r = _order(parts["R"][-1])
             closing = [w for w in parts["W"] if _order(w) > last_r]
         for row in closing:
-            result[row["id"]] = Position(None)          # closes Matins
+            result[row["id"]] = Position(None)  # closes Matins
         opening = [w for w in parts["W"] if w not in closing]
         for row in opening:
             check = f"several versicles in nocturn {n}" if len(opening) > 1 else None
@@ -173,7 +194,9 @@ def _matins(main, result) -> None:
             if genre == "W":
                 result[row["id"]] = Position(None, "Matins versicle without a nocturn")
             else:
-                result[row["id"]] = Position(str(k), "Matins without nocturns: numbered in series")
+                result[row["id"]] = Position(
+                    str(k), "Matins without nocturns: numbered in series"
+                )
     _singletons_or_series([r for rows in by_genre.values() for r in rows], result)
 
 
@@ -193,7 +216,9 @@ def _canticle_cues(every) -> dict[int, str]:
     found = {}
     for row, nxt in zip(every, every[1:]):
         if row["genre"] == "A" and nxt["row_type"] == "psalm_cue":
-            text = " ".join(x for x in (nxt["fulltext_edition"], nxt["rubric"]) if x).lower()
+            text = " ".join(
+                x for x in (nxt["fulltext_edition"], nxt["rubric"]) if x
+            ).lower()
             for word, letter in CANTICLE_CUES:
                 if word in text:
                     found[row["id"]] = letter
@@ -230,12 +255,17 @@ def _canticle_office(main, letter, cue_after, result) -> None:
         if SERIES_RUBRIC.search(row["rubric"] or ""):
             result[row["id"]] = Position("1")
         else:
-            result[row["id"]] = Position("p", "single psalm antiphon: 'p' if sung with all psalms, "
-                                              "'1' if it begins a series")
+            result[row["id"]] = Position(
+                "p",
+                "single psalm antiphon: 'p' if sung with all psalms, "
+                "'1' if it begins a series",
+            )
     else:
         too_many = len(psalm) > 5
         for k, row in enumerate(psalm, start=1):
-            result[row["id"]] = Position(str(k), "more than five psalm antiphons" if too_many else None)
+            result[row["id"]] = Position(
+                str(k), "more than five psalm antiphons" if too_many else None
+            )
 
     by_letter: dict[str, list] = defaultdict(list)
     for row in canticle:
@@ -261,14 +291,21 @@ def _singletons_or_series(rows, result) -> None:
             result[members[0]["id"]] = Position(None)
             continue
         for k, row in enumerate(members, start=1):
-            result[row["id"]] = Position(str(k), f"several {genre} chants in this service: "
-                                                 "numbered in series; alternates share a position")
+            result[row["id"]] = Position(
+                str(k),
+                f"several {genre} chants in this service: "
+                "numbered in series; alternates share a position",
+            )
 
 
-def refresh_position_flags(conn: sqlite3.Connection, source_id: int) -> dict[int, Position]:
+def refresh_position_flags(
+    conn: sqlite3.Connection, source_id: int
+) -> dict[int, Position]:
     """Recompute positions and make the POSITION_CHECK flags match."""
     positions = compute_positions(conn, source_id)
     with conn:
         for line_id, pos in positions.items():
-            refresh_flags(conn, line_id, (FLAG,), [(FLAG, pos.check)] if pos.check else [])
+            refresh_flags(
+                conn, line_id, (FLAG,), [(FLAG, pos.check)] if pos.check else []
+            )
     return positions

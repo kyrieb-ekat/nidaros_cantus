@@ -32,18 +32,21 @@ LIGATURES = {"æ": "ae", "Æ": "Ae", "œ": "oe", "Œ": "Oe"}
 
 @dataclass(frozen=True)
 class Comparison:
-    score: float       # word-level similarity, 0-1
-    text_class: str    # a key of CLASS_ORDER
+    score: float  # word-level similarity, 0-1
+    text_class: str  # a key of CLASS_ORDER
     reason: str
 
 
 # --------------------------------------------------------------------------
 # Normalisation
 
+
 @lru_cache(maxsize=None)
 def load_rules(path: str = str(RULES_PATH)) -> tuple[tuple[re.Pattern, str], ...]:
     rules = []
-    for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+    for number, line in enumerate(
+        Path(path).read_text(encoding="utf-8").splitlines(), 1
+    ):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if "\t" not in line:
@@ -80,6 +83,7 @@ def is_incipit_only(ci_text: str | None) -> bool:
 # --------------------------------------------------------------------------
 # Comparison
 
+
 def compare(local_text: str, ci_text: str, local_is_cue: bool = False) -> Comparison:
     """Classify a Cantus Index text against the line's text.
 
@@ -92,17 +96,26 @@ def compare(local_text: str, ci_text: str, local_is_cue: bool = False) -> Compar
 
     ci_short = is_incipit_only(ci_text)
     if ci_short and not local_is_cue and len(b) < len(a):
-        score = _ratio(a[:len(b)], b)
+        score = _ratio(a[: len(b)], b)
         if score >= 0.75:
-            return Comparison(score, "incomplete",
-                              f"the Cantus Index record gives only the opening ({len(b)} words); "
-                              f"this text has {len(a)}")
-        return Comparison(score * len(b) / len(a), "new", "differs from the Cantus Index incipit")
+            return Comparison(
+                score,
+                "incomplete",
+                f"the Cantus Index record gives only the opening ({len(b)} words); "
+                f"this text has {len(a)}",
+            )
+        return Comparison(
+            score * len(b) / len(a), "new", "differs from the Cantus Index incipit"
+        )
 
     if local_is_cue or ci_short:
         n = min(len(a), len(b))
         score = _ratio(a[:n], b[:n])
-        who = "this line is a cue" if local_is_cue else "the Cantus Index record gives only the opening"
+        who = (
+            "this line is a cue"
+            if local_is_cue
+            else "the Cantus Index record gives only the opening"
+        )
         if a[:n] == b[:n]:
             return Comparison(1.0, "identical", f"{who}; the opening matches")
         if score >= 0.6:
@@ -110,8 +123,13 @@ def compare(local_text: str, ci_text: str, local_is_cue: bool = False) -> Compar
         return Comparison(score, "new", f"{who}; the opening differs")
 
     result = _compare_full(a, b)
-    if result.text_class == "identical" and plain(local_text) != plain(ci_text).replace("*", "").strip():
-        return Comparison(1.0, "identical", "the texts are the same apart from spelling")
+    if (
+        result.text_class == "identical"
+        and plain(local_text) != plain(ci_text).replace("*", "").strip()
+    ):
+        return Comparison(
+            1.0, "identical", "the texts are the same apart from spelling"
+        )
     return result
 
 
@@ -121,12 +139,18 @@ def _compare_full(a: list[str], b: list[str]) -> Comparison:
 
     # Beginning with Alleluia makes a variant; Alleluia elsewhere does not.
     if (a[0] == ALLELUIA) != (b[0] == ALLELUIA):
-        rest = _compare_full(_drop_leading_alleluia(a), _drop_leading_alleluia(b)) \
-            if _drop_leading_alleluia(a) and _drop_leading_alleluia(b) else None
+        rest = (
+            _compare_full(_drop_leading_alleluia(a), _drop_leading_alleluia(b))
+            if _drop_leading_alleluia(a) and _drop_leading_alleluia(b)
+            else None
+        )
         if rest and rest.text_class in ("identical", "minor"):
             who = "this text" if a[0] == ALLELUIA else "the Cantus Index text"
-            return Comparison(rest.score, "suffix",
-                              f"{who} begins with Alleluia; otherwise {rest.reason}")
+            return Comparison(
+                rest.score,
+                "suffix",
+                f"{who} begins with Alleluia; otherwise {rest.reason}",
+            )
 
     a2 = [w for w in a if w != ALLELUIA]
     b2 = [w for w in b if w != ALLELUIA]
@@ -140,18 +164,25 @@ def _compare_full(a: list[str], b: list[str]) -> Comparison:
     changes = []
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag != "equal":
-            changes.append((tag, i1, i2, j1, j2, _word_differences(a2[i1:i2], b2[j1:j2])))
+            changes.append(
+                (tag, i1, i2, j1, j2, _word_differences(a2[i1:i2], b2[j1:j2]))
+            )
     total = sum(c[5] for c in changes)
     if total == 0:
-        return Comparison(score, "minor", "the texts differ only in word endings (case or tense)")
+        return Comparison(
+            score, "minor", "the texts differ only in word endings (case or tense)"
+        )
 
     tag, i1, i2, j1, j2, count = changes[0]
     if i1 == 0 and j1 == 0 and count > 0:
         rest_a, rest_b = a2[i2:], b2[j2:]
         if len(rest_a) >= 3 and len(rest_b) >= 3 and _ratio(rest_a, rest_b) >= 0.8:
             n = max(i2 - i1, j2 - j1)
-            return Comparison(score, "suffix",
-                              f"the opening differs ({_n_words(n)}); the rest matches")
+            return Comparison(
+                score,
+                "suffix",
+                f"the opening differs ({_n_words(n)}); the rest matches",
+            )
 
     long_changes = [c for c in changes if c[5] >= 4 and not (c[1] == 0 and c[3] == 0)]
     if long_changes:
@@ -168,8 +199,11 @@ def _compare_full(a: list[str], b: list[str]) -> Comparison:
         verb = "differs" if total == 1 else "differ"
         return Comparison(score, "minor", f"{_n_words(total)} {verb}")
     if score >= 0.7:
-        return Comparison(score, "suffix",
-                          f"{total} words differ in several places; check whether this is a variant")
+        return Comparison(
+            score,
+            "suffix",
+            f"{total} words differ in several places; check whether this is a variant",
+        )
     return Comparison(score, "new", f"the texts differ throughout ({total} words)")
 
 
@@ -208,6 +242,7 @@ def _n_words(n: int) -> str:
 # celi, preciosa, eius), so a spelling-tolerant pattern is tried when the
 # literal words find nothing.
 
+
 def query_words(text: str | None) -> list[str]:
     """Words of the line's text as spelled, for searching."""
     return plain(text).replace("*", " ").split()
@@ -225,13 +260,13 @@ def tolerant_query(ws: list[str], n: int) -> str:
 def _tolerant_word(word: str) -> str:
     out = []
     for i, ch in enumerate(word):
-        after = word[i + 1:i + 3]
+        after = word[i + 1 : i + 3]
         if ch in "ijyuv":
-            out.append("_")                      # i/j/y and u/v
+            out.append("_")  # i/j/y and u/v
         elif ch in "ct" and len(after) == 2 and after[0] == "i" and after[1] in "aeiou":
-            out.append("_")                      # preciosa / pretiosa
+            out.append("_")  # preciosa / pretiosa
         elif ch == "e":
-            out.append("%e")                     # hec / haec, celi / caeli / coeli
+            out.append("%e")  # hec / haec, celi / caeli / coeli
         else:
             out.append(ch)
     return "".join(out)

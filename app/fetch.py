@@ -24,13 +24,19 @@ from typing import Callable, Iterable
 
 from .cantus import RESULT_CAP, CantusError, CantusIndex
 from .db import refresh_flags
-from .textmatch import (CLASS_ORDER, Comparison, compare, distinctive_word,
-                        query_words, tolerant_query)
+from .textmatch import (
+    CLASS_ORDER,
+    Comparison,
+    compare,
+    distinctive_word,
+    query_words,
+    tolerant_query,
+)
 
 METHOD = "ci_text"
-KEEP = 10               # candidates stored per line
-DETAIL = 3              # candidates whose full record (json-cid) is fetched
-MAX_WORDS = 6           # widest search
+KEEP = 10  # candidates stored per line
+DETAIL = 3  # candidates whose full record (json-cid) is fetched
+MAX_WORDS = 6  # widest search
 CI_FLAGS = ("CI_VARIANT", "CI_GENRE_NEW_CID", "CI_TEXT_INCOMPLETE", "CI_NO_MATCH")
 GOOD = ("identical", "minor")
 
@@ -45,8 +51,12 @@ class Scored:
 
     @property
     def rank_key(self):
-        return (self.genre_match == "mismatch", CLASS_ORDER[self.comparison.text_class],
-                -self.comparison.score, self.cid)
+        return (
+            self.genre_match == "mismatch",
+            CLASS_ORDER[self.comparison.text_class],
+            -self.comparison.score,
+            self.cid,
+        )
 
 
 @dataclass
@@ -65,9 +75,14 @@ class LineResult:
 # --------------------------------------------------------------------------
 # Selecting lines and texts
 
-def target_lines(conn: sqlite3.Connection, source_id: int, feast: str | None = None,
-                 line_ids: Iterable[int] | None = None) -> list[sqlite3.Row]:
-    sql = ("SELECT * FROM line_export WHERE source_id = ? AND in_import = 1")
+
+def target_lines(
+    conn: sqlite3.Connection,
+    source_id: int,
+    feast: str | None = None,
+    line_ids: Iterable[int] | None = None,
+) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM line_export WHERE source_id = ? AND in_import = 1"
     params: list = [source_id]
     if feast is not None:
         sql += " AND feast = ?"
@@ -79,13 +94,17 @@ def target_lines(conn: sqlite3.Connection, source_id: int, feast: str | None = N
     return conn.execute(sql + " ORDER BY page_start, line_on_page", params).fetchall()
 
 
-def comparison_text(conn: sqlite3.Connection, line: sqlite3.Row) -> tuple[str | None, bool]:
+def comparison_text(
+    conn: sqlite3.Connection, line: sqlite3.Row
+) -> tuple[str | None, bool]:
     """The text to compare, and whether it is only a cue (opening words)."""
     if not line["incipit_only"]:
         return line["fulltext_standardized"], False
     target = conn.execute(
         "SELECT t.fulltext_standardized FROM line_link k JOIN line t ON t.id = k.to_line "
-        "WHERE k.from_line = ? AND k.kind = 'full_text_in'", (line["id"],)).fetchone()
+        "WHERE k.from_line = ? AND k.kind = 'full_text_in'",
+        (line["id"],),
+    ).fetchone()
     if target and target[0]:
         return target[0], False
     if line["xref_resolved_text"]:
@@ -106,8 +125,10 @@ def ci_genres(conn: sqlite3.Connection, genre: str | None) -> list[str] | None:
 # --------------------------------------------------------------------------
 # Searching and scoring
 
-def score_results(results: Iterable[dict], text: str, is_cue: bool,
-                  genres: list[str] | None) -> list[Scored]:
+
+def score_results(
+    results: Iterable[dict], text: str, is_cue: bool, genres: list[str] | None
+) -> list[Scored]:
     scored: dict[str, Scored] = {}
     for item in results:
         cid = (item.get("cid") or "").strip()
@@ -119,12 +140,15 @@ def score_results(results: Iterable[dict], text: str, is_cue: bool,
             genre_match = "unknown"
         else:
             genre_match = "match" if ci_genre in genres else "mismatch"
-        scored[cid] = Scored(cid, ci_text, ci_genre, compare(text, ci_text, is_cue), genre_match)
+        scored[cid] = Scored(
+            cid, ci_text, ci_genre, compare(text, ci_text, is_cue), genre_match
+        )
     return sorted(scored.values(), key=lambda s: s.rank_key)
 
 
-def search(client: CantusIndex, text: str, is_cue: bool,
-           genres: list[str] | None) -> tuple[list[Scored], list[str]]:
+def search(
+    client: CantusIndex, text: str, is_cue: bool, genres: list[str] | None
+) -> tuple[list[Scored], list[str]]:
     ws = query_words(text)
     if not ws:
         return [], []
@@ -140,8 +164,10 @@ def search(client: CantusIndex, text: str, is_cue: bool,
         return len(found)
 
     def close_enough() -> bool:
-        return any(s.comparison.text_class != "new"
-                   for s in score_results(results, text, is_cue, genres))
+        return any(
+            s.comparison.text_class != "new"
+            for s in score_results(results, text, is_cue, genres)
+        )
 
     # 1. Opening words, widened while the result cap is hit.
     n = min(3, len(ws))
@@ -171,52 +197,86 @@ def search(client: CantusIndex, text: str, is_cue: bool,
 def line_flags(scored: list[Scored], line_genre: str | None) -> list[tuple[str, str]]:
     """CI_* flags for a line, each with a note naming the CID it concerns."""
     same = [s for s in scored if s.genre_match != "mismatch"]
-    other_good = [s for s in scored if s.genre_match == "mismatch"
-                  and s.comparison.text_class in GOOD]
+    other_good = [
+        s
+        for s in scored
+        if s.genre_match == "mismatch" and s.comparison.text_class in GOOD
+    ]
     best = same[0] if same else None
     flags: list[tuple[str, str]] = []
 
     if best and best.comparison.text_class == "incomplete":
-        flags.append(("CI_TEXT_INCOMPLETE",
-                      f"probable parent {best.cid}: {best.comparison.reason}"))
+        flags.append(
+            (
+                "CI_TEXT_INCOMPLETE",
+                f"probable parent {best.cid}: {best.comparison.reason}",
+            )
+        )
     elif best and best.comparison.text_class == "suffix":
-        flags.append(("CI_VARIANT", f"probable parent {best.cid}: {best.comparison.reason}"))
+        flags.append(
+            ("CI_VARIANT", f"probable parent {best.cid}: {best.comparison.reason}")
+        )
 
     if other_good and not (best and best.comparison.text_class in GOOD):
         g = other_good[0]
-        flags.append(("CI_GENRE_NEW_CID",
-                      f"text matches {g.cid} (genre {g.ci_genre}; this line is {line_genre})"))
+        flags.append(
+            (
+                "CI_GENRE_NEW_CID",
+                f"text matches {g.cid} (genre {g.ci_genre}; this line is {line_genre})",
+            )
+        )
 
     if not flags and not (best and best.comparison.text_class in GOOD):
         if not scored:
             flags.append(("CI_NO_MATCH", "no search results"))
         else:
             closest = best or scored[0]
-            flags.append(("CI_NO_MATCH",
-                          f"closest {closest.cid}: {closest.comparison.reason}"))
+            flags.append(
+                ("CI_NO_MATCH", f"closest {closest.cid}: {closest.comparison.reason}")
+            )
     return flags
 
 
 # --------------------------------------------------------------------------
 # Storing
 
+
 def _kept(scored: list[Scored]) -> list[Scored]:
     kept = scored[:KEEP]
-    extra = [s for s in scored[KEEP:] if s.genre_match == "mismatch"
-             and s.comparison.text_class in GOOD][:3]
+    extra = [
+        s
+        for s in scored[KEEP:]
+        if s.genre_match == "mismatch" and s.comparison.text_class in GOOD
+    ][:3]
     return kept + extra
 
 
-def store(conn: sqlite3.Connection, line_id: int, scored: list[Scored],
-          flags: list[tuple[str, str]]) -> None:
+def store(
+    conn: sqlite3.Connection,
+    line_id: int,
+    scored: list[Scored],
+    flags: list[tuple[str, str]],
+) -> None:
     with conn:
-        conn.execute("DELETE FROM candidate WHERE line_id = ? AND method = ?", (line_id, METHOD))
+        conn.execute(
+            "DELETE FROM candidate WHERE line_id = ? AND method = ?", (line_id, METHOD)
+        )
         for rank, s in enumerate(_kept(scored), start=1):
             conn.execute(
                 "INSERT INTO candidate (line_id, cid, score, rank, method, cand_text, cand_genre, "
                 "text_class, class_reason, genre_match) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (line_id, s.cid, round(s.comparison.score, 4), rank, METHOD, s.ci_text,
-                 s.ci_genre, s.comparison.text_class, s.comparison.reason, s.genre_match),
+                (
+                    line_id,
+                    s.cid,
+                    round(s.comparison.score, 4),
+                    rank,
+                    METHOD,
+                    s.ci_text,
+                    s.ci_genre,
+                    s.comparison.text_class,
+                    s.comparison.reason,
+                    s.genre_match,
+                ),
             )
         refresh_flags(conn, line_id, CI_FLAGS, flags)
 
@@ -224,7 +284,10 @@ def store(conn: sqlite3.Connection, line_id: int, scored: list[Scored],
 # --------------------------------------------------------------------------
 # Running
 
-def fetch_line(conn: sqlite3.Connection, client: CantusIndex, line: sqlite3.Row) -> LineResult:
+
+def fetch_line(
+    conn: sqlite3.Connection, client: CantusIndex, line: sqlite3.Row
+) -> LineResult:
     result = LineResult(line_id=line["id"])
     text, is_cue = comparison_text(conn, line)
     if not text:
@@ -237,8 +300,11 @@ def fetch_line(conn: sqlite3.Connection, client: CantusIndex, line: sqlite3.Row)
         # Full records for the leading candidates, and for a matching text of
         # another genre when it is the reason for a flag.
         detail = [s for s in scored if s.genre_match != "mismatch"][:DETAIL]
-        detail += [s for s in scored if s.genre_match == "mismatch"
-                   and s.comparison.text_class in GOOD][:1]
+        detail += [
+            s
+            for s in scored
+            if s.genre_match == "mismatch" and s.comparison.text_class in GOOD
+        ][:1]
         for s in detail:
             client.chant(s.cid)
     except CantusError as exc:
@@ -257,9 +323,12 @@ class FetchSummary:
     unconfirmed_genres: dict[str, Counter] = field(default_factory=dict)
 
 
-def fetch_lines(conn: sqlite3.Connection, client: CantusIndex, lines: list[sqlite3.Row],
-                progress: Callable[[int, int, sqlite3.Row, LineResult], None] | None = None
-                ) -> FetchSummary:
+def fetch_lines(
+    conn: sqlite3.Connection,
+    client: CantusIndex,
+    lines: list[sqlite3.Row],
+    progress: Callable[[int, int, sqlite3.Row, LineResult], None] | None = None,
+) -> FetchSummary:
     summary = FetchSummary()
     for index, line in enumerate(lines, start=1):
         result = fetch_line(conn, client, line)

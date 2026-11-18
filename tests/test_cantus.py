@@ -22,7 +22,10 @@ class Clock:
 
 def client(conn, fake, **kwargs):
     clock = Clock()
-    return CantusIndex(conn, transport=fake, sleep=clock.sleep, clock=clock, **kwargs), clock
+    return (
+        CantusIndex(conn, transport=fake, sleep=clock.sleep, clock=clock, **kwargs),
+        clock,
+    )
 
 
 def test_bom_is_removed_and_responses_are_cached(conn):
@@ -73,10 +76,14 @@ def test_rate_limit(conn):
 
 def test_server_errors_are_retried(conn):
     url = f"{BASE_URL}/json-text/homo"
-    fake = FakeCantusIndex(corpus=[{"cid": "1", "fulltext": "Homo dei", "genre": "R"}],
-                           failures={url: [503, 502]})
+    fake = FakeCantusIndex(
+        corpus=[{"cid": "1", "fulltext": "Homo dei", "genre": "R"}],
+        failures={url: [503, 502]},
+    )
     ci, clock = client(conn, fake, min_interval=0)
-    assert ci.text_search("homo") == [{"cid": "1", "fulltext": "Homo dei", "genre": "R"}]
+    assert ci.text_search("homo") == [
+        {"cid": "1", "fulltext": "Homo dei", "genre": "R"}
+    ]
     assert clock.slept == [5, 15]
 
 

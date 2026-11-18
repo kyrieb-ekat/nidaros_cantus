@@ -15,24 +15,52 @@ class Book:
         self.last = {}
         with conn:
             conn.execute("INSERT INTO source (siglum, title) VALUES ('t', 'T')")
-            conn.execute("INSERT INTO import_batch (source_id, file_name, file_sha256, page_first, "
-                         "page_last, line_count) VALUES (1, 'f', 'x', 1, 1, 0)")
+            conn.execute(
+                "INSERT INTO import_batch (source_id, file_name, file_sha256, page_first, "
+                "page_last, line_count) VALUES (1, 'f', 'x', 1, 1, 0)"
+            )
 
-    def add(self, genre=None, office="V", row_type=None, nocturn=None, slot=None, memorial=None,
-            rubric=None, text="Textus", feast="F", link=None):
+    def add(
+        self,
+        genre=None,
+        office="V",
+        row_type=None,
+        nocturn=None,
+        slot=None,
+        memorial=None,
+        rubric=None,
+        text="Textus",
+        feast="F",
+        link=None,
+    ):
         self.n += 1
         with self.conn:
             cur = self.conn.execute(
                 "INSERT INTO line (source_id, batch_id, page_start, line_on_page, row_type, feast, "
                 "office, nocturn, slot, genre, sub_section, rubric, fulltext_standardized, "
                 "fulltext_edition) VALUES (1, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (self.n * 10, row_type or (genre or "rubric"), feast, office, nocturn, slot, genre,
-                 memorial, rubric, text, text))
+                (
+                    self.n * 10,
+                    row_type or (genre or "rubric"),
+                    feast,
+                    office,
+                    nocturn,
+                    slot,
+                    genre,
+                    memorial,
+                    rubric,
+                    text,
+                    text,
+                ),
+            )
             line_id = cur.lastrowid
             if link:
                 kind, target = link
-                self.conn.execute("INSERT INTO line_link (from_line, to_line, kind, origin) "
-                                  "VALUES (?, ?, ?, 'import')", (line_id, target, kind))
+                self.conn.execute(
+                    "INSERT INTO line_link (from_line, to_line, kind, origin) "
+                    "VALUES (?, ?, ?, 'import')",
+                    (line_id, target, kind),
+                )
         return line_id
 
 
@@ -98,7 +126,20 @@ def test_matins(book):
     w2 = book.add("W", office="M", nocturn=2)
     r3 = book.add("R", office="M", nocturn=2)
     vals, checks = values(book, [i, h] + n1 + [w1, r1, v1, r2, a2, w2, r3])
-    assert vals == [None, None, "1.1", "1.2", "1.3", "1.", "1.1", "01", "1.2", "2.", "2.", "2.1"]
+    assert vals == [
+        None,
+        None,
+        "1.1",
+        "1.2",
+        "1.3",
+        "1.",
+        "1.1",
+        "01",
+        "1.2",
+        "2.",
+        "2.",
+        "2.1",
+    ]
     assert not any(checks)
 
 
@@ -148,7 +189,9 @@ def test_flags_follow_positions(book):
     a = book.add("A", office="M")
     b = book.add("A", office="M")
     refresh_position_flags(book.conn, 1)
-    count = "SELECT COUNT(*) FROM flag WHERE code = 'POSITION_CHECK' AND status = 'open'"
+    count = (
+        "SELECT COUNT(*) FROM flag WHERE code = 'POSITION_CHECK' AND status = 'open'"
+    )
     assert book.conn.execute(count).fetchone()[0] == 2
     db.update_line(book.conn, a, "position_override", "1.1")
     db.update_line(book.conn, b, "position_override", "1.2")
