@@ -16,12 +16,12 @@ Design rules
   * Nothing is dropped: everything that is not an import row stays in the master.
   * fulltext_ms     = the print's reading (edition text with endnote variants applied)
   * fulltext_standardized = PROVISIONAL (see RULES below); to be proofread.
-  * Cantus IDs: optionally PROPOSED (master only) from a Cantus Index export; never
-    written to the import file.
+  * Cantus IDs: never assigned here. enrich_cids.py proposes candidates in the master; export_import.py
+    writes a CID to the import file only where cid_decision is Confirm or Fixed.
 
 Usage (see --help):
   python parse_breviarium.py HTML --outdir OUT [--source-id ID] [--seq-start N]
-         [--start-heading ...] [--end-heading ...] [--ci-export CI.csv] [--include-prayers]
+         [--start-heading ...] [--end-heading ...] [--include-prayers]
 """
 import re, csv, sys, argparse, json, os, warnings
 from collections import OrderedDict, defaultdict, Counter
@@ -57,17 +57,12 @@ HOURS = [
     (re.compile(r'^(In completorio|Ad completorium)', re.I), 'C', False),
 ]
 NOCTURN_RE = re.compile(r'^In (primo|secundo|tertio) n\w*turno', re.I)
-VIGIL_RE = re.compile(r'^IN\s+[UV]IGILIA\s+', re.I)
-DAY_HOURS = {'L', 'P', 'T', 'S', 'N', 'D'}       # after any of these, an unqualified "Ad vesperas" is V2
-SUPPLIED_NOTE = 'Feast heading not printed in the edition; supplied'   # goes to "extra" in the import file
 NOCT_NUM = {'primo': 1, 'secundo': 2, 'tertio': 3}
 
 FLAG_HELP = OrderedDict([
     ('NO_OFFICE', 'No hour rubric precedes this item; office left blank'),
     ('OFFICE_INFERRED', 'Office inferred (Invitatorium opens Matins)'),
     ('OFFICE_V_UNSPEC', '"Ad vesperas" without primas/secundas; coded V (first vespers) provisionally'),
-    ('OFFICE_V2_INFERRED', '"Ad vesperas" without primas/secundas after Lauds or a day hour of the same feast; coded V2'),
-    ('FEAST_SUPPLIED', 'Feast heading not printed; supplied (see extra_note). Map it to a Cantus feast in the app'),
     ('XREF_LEAF_RESOLVED', 'Incipit-only item; full text found on the cited leaf (see xref_resolved_*)'),
     ('XREF_LEAF_UNRESOLVED', 'Incipit-only item; cited leaf found but incipit not matched'),
     ('XREF_LEAF_AMBIGUOUS', 'Incipit-only item; several matches on the cited leaf'),
@@ -84,7 +79,8 @@ FLAG_HELP = OrderedDict([
     ('COMMEMORATION', 'Commemoration/memorial: CDB service R (Memorial) may be more apt'),
     ('PAGE_BREAK_IN_ROW', 'Row continues onto the next page (see page_end)'),
     ('HYMN_METHOD', 'Hymn stanzas entered as H + HV rows; confirm against the CDB hymn data-entry appendix'),
-    ('CID_PROPOSED', 'One or more Cantus Index candidates proposed (master only; never imported)'),
+    ('CID_PROPOSED', 'Cantus Index candidate(s) proposed by enrich_cids.py; only imported after cid_decision = Confirm or Fixed'),
+    ('CID_NO_MATCH', 'Cantus Index search succeeded but found no matching text (candidate new chant; not an error)'),
 ])
 
 # ----------------------------------------------------------------------------
@@ -416,8 +412,8 @@ MASTER_COLS = ['master_seq', 'row_type', 'in_import', 'import_seq', 'page_start'
                'nocturn', 'slot', 'genre', 'position', 'sign', 'incipit', 'fulltext_edition',
                'fulltext_ms', 'fulltext_standardized', 'rubric', 'xref_raw', 'xref_leaf',
                'incipit_only', 'xref_resolved_page', 'xref_resolved_text', 'repetendum_note',
-               'variant_notes', 'indexing_notes', 'extra_note', 'review_flags', 'cid_proposed',
-               'cid_candidate_text', 'cid_decision']
+               'variant_notes', 'indexing_notes', 'review_flags', 'cid_proposed', 'cid_candidate_text',
+               'cid_decision']
 
 def new_row(**kw):
     r = OrderedDict((c, '') for c in MASTER_COLS)
@@ -452,8 +448,7 @@ class Parser:
         self.rows = []
         self.page = None
         self.state = dict(content_structure='', feast='', sub_section='', office='', office_printed='',
-                          nocturn='', office_inferred=False, office_v_unspec=False,
-                          feast_printed='', vigil=False, hours_seen=set(), extra_note='')
+                          nocturn='', office_inferred=False, office_v_unspec=False)
         self.pending_sign = None       # (kind, lead_rubric, page, flags)
         self.pending_head = None       # row waiting for its text block(s)
         self.hymn_open = None          # list of rows for an open hymn
@@ -481,9 +476,6 @@ class Parser:
         row['office'] = row['office'] or self.state['office']
         row['office_printed'] = row['office_printed'] or self.state['office_printed']
         row['nocturn'] = row['nocturn'] or self.state['nocturn']
-        row['_feast_printed'] = self.state['feast_printed']
-        if self.state['extra_note'] and row['genre'] and not row['extra_note']:
-            row['extra_note'] = self.state['extra_note']
         if row['page_start']:
             row['facsimile_ref'] = 's%s' % row['page_start']
             row['signature_leaf'] = signature_leaf(row['page_start'], self.page_sig)
@@ -516,6 +508,20 @@ class Parser:
 
     def block(self, kind, el):
         segs = segments(el)
+        try:
+            self._block(kind, el, segs)
+        finally:
+            # a page marker can sit anywhere in a line (e.g. inside a rubric line); later rows must start on that page
+            last = None
+            for sg in segs:
+                if sg[0] == 'page':
+                    pg, _sig = parse_pageref(sg[1])
+                    if pg:
+                        last = pg
+            if last:
+                self.page = last
+
+    def _block(self, kind, el, segs):
         if kind == 'stanza':
             self.stanza(el, segs)
             return
@@ -578,8 +584,7 @@ class Parser:
             self.state.update(feast='', sub_section='', office='', office_printed='', nocturn='')
         else:
             self.state.update(feast=red, sub_section='', office='', office_printed='', nocturn='',
-                              office_inferred=False, office_v_unspec=False, feast_printed=red,
-                              vigil=bool(VIGIL_RE.match(red)), hours_seen=set(), extra_note='')
+                              office_inferred=False, office_v_unspec=False)
             row['feast'] = red
         self.emit(row)
 
@@ -591,37 +596,14 @@ class Parser:
         for rx, code, unspec in HOURS:
             if rx.search(red):
                 self.close_pending()
-                flags = []
-                if code == 'V' and self.state['vigil']:
-                    # first Vespers under a vigil heading: the feast proper begins here
-                    base = VIGIL_RE.sub('', self.state['feast']).strip()
-                    self.supplied_heading('[%s]' % base)
-                elif code == 'M' and 'V2' in self.state['hours_seen']:
-                    # Matins after Second Vespers: a following day's office, heading not printed
-                    base = self.state['feast'].strip('[]')
-                    self.supplied_heading('[%s, post secundas vesperas]' % base)
-                if unspec and code == 'V' and self.state['hours_seen'] & DAY_HOURS:
-                    code, unspec = 'V2', False
-                    flags.append('OFFICE_V2_INFERRED')
-                elif unspec:
-                    flags.append('OFFICE_V_UNSPEC')
                 self.state.update(office=code, office_printed=red, nocturn='', office_inferred=False,
                                   office_v_unspec=unspec, sub_section='')
-                self.state['hours_seen'].add(code)
                 row = new_row(row_type='office_rubric', page_start=self.page, rubric=red)
-                row['_flags'].extend(flags)
+                if unspec:
+                    row['_flags'].append('OFFICE_V_UNSPEC')
                 self.emit(row)
                 return True
         return False
-
-    def supplied_heading(self, label, note=SUPPLIED_NOTE):
-        """Start a new feast part whose heading the edition does not print."""
-        self.state.update(feast=label, sub_section='', office='', office_printed='', nocturn='',
-                          office_inferred=False, office_v_unspec=False, vigil=False,
-                          hours_seen=set(), extra_note=note)
-        row = new_row(row_type='heading', page_start=self.page, feast=label, extra_note=note)
-        row['_flags'].append('FEAST_SUPPLIED')
-        self.emit(row)
 
     def nocturn(self, red, segs):
         m = NOCTURN_RE.search(red)
@@ -709,15 +691,11 @@ class Parser:
 
     def office_from_invitatorium(self):
         self.state['sub_section'] = ''
-        if 'V2' in self.state['hours_seen'] and self.state['office'] != 'M':
-            base = self.state['feast'].strip('[]')
-            self.supplied_heading('[%s, post secundas vesperas]' % base)
         if self.state['office'] != 'M':
             self.state['office'] = 'M'
             self.state['office_printed'] = '(Invitatorium)'
             self.state['office_inferred'] = True
             self.state['inv_flag'] = True
-        self.state['hours_seen'].add('M')
 
     def text_block(self, segs):
         acc = Acc(self.notes)
@@ -1154,7 +1132,7 @@ def postprocess(rows, cfg, leaf_info):
     seen_by_feast = defaultdict(list)
     for r in rows:
         if r['genre'] in ('A', 'R', 'V', 'W', 'H', 'I'):
-            key = (r.get('_feast_printed') or r['feast'], r['genre'])
+            key = (r['feast'], r['genre'])
             if r['_incipit_only']:
                 inc = norm_cmp(r['fulltext_edition'])
                 nwords = len(inc.split())
@@ -1218,45 +1196,6 @@ def postprocess(rows, cfg, leaf_info):
     return rows
 
 # ----------------------------------------------------------------------------
-# Cantus Index proposals (optional, master only)
-# ----------------------------------------------------------------------------
-def load_ci(path):
-    rows = []
-    with open(path, newline='', encoding='utf-8') as fh:
-        rd = csv.DictReader(fh)
-        cols = {c.lower().strip(): c for c in rd.fieldnames}
-        ccid = next((cols[k] for k in ('cid', 'cantus_id', 'cantus id') if k in cols), None)
-        ctxt = next((cols[k] for k in ('fulltext', 'full_text', 'text', 'incipit', 'fulltext_standardized')
-                     if k in cols), None)
-        cgen = next((cols[k] for k in ('genre', 'genre_id') if k in cols), None)
-        if not ccid or not ctxt:
-            raise SystemExit('CI export needs a CID column and a text/incipit column')
-        for rec in rd:
-            rows.append((rec[ccid].strip(), norm_cmp(rec[ctxt]), rec.get(cgen, '') if cgen else ''))
-    return rows
-
-def propose_cids(rows, ci):
-    index = defaultdict(list)
-    for cid, key, gen in ci:
-        index[' '.join(key.split()[:3])].append((cid, key, gen))
-    for r in rows:
-        if r['genre'] not in ('A', 'R', 'V', 'W', 'H', 'I'):
-            continue
-        key = norm_cmp(re.sub(r'[\u2039\u203a|*]', '', r['fulltext_standardized']))
-        k3 = ' '.join(key.split()[:3])
-        cands = []
-        for cid, ckey, gen in index.get(k3, []):
-            n = min(len(key.split()), len(ckey.split()))
-            same = sum(1 for a, b in zip(key.split(), ckey.split()) if a == b)
-            score = same / float(max(1, n))
-            cands.append((score, cid))
-        cands.sort(reverse=True)
-        if cands:
-            r['cid_proposed'] = '; '.join('%s (%.2f)' % (c, s) for s, c in cands[:3])
-            r['_flags'].append('CID_PROPOSED')
-            r['review_flags'] = '; '.join(OrderedDict((f, 1) for f in r['_flags']).keys())
-
-# ----------------------------------------------------------------------------
 # outputs
 # ----------------------------------------------------------------------------
 IMPORT_COLS = ['source_id', 'marginalia', 'folio', 'content structure', 'sequence', 'incipit', 'feast', 'office',
@@ -1265,40 +1204,77 @@ IMPORT_COLS = ['source_id', 'marginalia', 'folio', 'content structure', 'sequenc
                'volpiano_proofread', 'image_link', 'melody_id', 'cao_concordances', 'addendum', 'extra',
                'indexing_notes', 'node_id']
 
-def import_rows(rows, cfg):
-    out = []
-    for r in rows:
-        if r['in_import'] != 'yes':
+def _s(v):
+    """cell value -> clean string (xlsx cells may be int/float/None)"""
+    if v is None:
+        return ''
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return str(v).strip()
+
+CID_OK = re.compile(r'^[a-z]?\d{5,7}[a-z]?(\.\d+)?$', re.I)
+
+def resolve_cid(rec):
+    """cantus_id for the import file: only when cid_decision is Confirm or Fixed and cid_proposed holds one CID.
+    returns (cid, problem)"""
+    dec = _s(rec.get('cid_decision')).lower()
+    if dec not in ('confirm', 'fixed'):
+        return '', ''
+    txt = re.sub(r'\([^)]*\)', ' ', _s(rec.get('cid_proposed')))
+    toks = [t for t in re.split(r'[;,\s]+', txt) if t]
+    if not toks:
+        return '', 'decision "%s" but cid_proposed is empty' % dec
+    uniq = list(OrderedDict((t.lower(), t) for t in toks).values())
+    if len(uniq) > 1:
+        return '', 'several CIDs in cid_proposed (%s): leave exactly one' % ', '.join(uniq)
+    cid = uniq[0]
+    if not CID_OK.match(cid):
+        return cid, 'unusual CID format "%s" (inserted anyway)' % cid
+    return cid, ''
+
+def import_rows_from_master(master, cfg):
+    """master: list of dicts keyed by master column names (strings or cell values).
+    Returns (import_rows, problems). The master is the source of truth, so manual fixes are honoured."""
+    out, problems = [], []
+    seq = cfg['seq_start'] - 1
+    for rec in master:
+        if _s(rec.get('in_import')).lower() != 'yes':
             continue
-        std = r['fulltext_standardized']
-        if r['_incipit_only'] and std:
-            std = std + '*'
+        seq += 1
+        std = re.sub(r'\*+\s*$', '', _s(rec.get('fulltext_standardized'))).strip()
+        if _s(rec.get('incipit_only')).lower() == 'yes' and std:
+            std += '*'
         notes = []
-        if r['indexing_notes']:
-            notes.append(r['indexing_notes'])
-        if r['variant_notes']:
-            notes.append('print variants: ' + r['variant_notes'])
-        if r['repetendum_note']:
-            notes.append(r['repetendum_note'])
-        if r['xref_resolved_text']:
-            notes.append('full text elsewhere (p. %s)' % r['xref_resolved_page'])
-        notes.append('edition p. %s%s' % (r['page_start'], ('-%s' % r['page_end']) if r['page_end'] else ''))
+        if _s(rec.get('indexing_notes')):
+            notes.append(_s(rec.get('indexing_notes')))
+        if _s(rec.get('variant_notes')):
+            notes.append('print variants: ' + _s(rec.get('variant_notes')))
+        if _s(rec.get('repetendum_note')):
+            notes.append(_s(rec.get('repetendum_note')))
+        if _s(rec.get('xref_resolved_text')):
+            notes.append('full text elsewhere (p. %s)' % _s(rec.get('xref_resolved_page')))
+        ps, pe = _s(rec.get('page_start')), _s(rec.get('page_end'))
+        notes.append('edition p. %s%s' % (ps, ('-%s' % pe) if pe else ''))
+        cid, prob = resolve_cid(rec)
+        if prob:
+            problems.append((_s(rec.get('master_seq')), prob, bool(cid)))
         d = OrderedDict((c, '') for c in IMPORT_COLS)
         d['source_id'] = cfg['source_id']
-        d['folio'] = r['page_start']
-        d['content structure'] = r['content_structure']
-        d['sequence'] = r['_import_seq']
-        d['incipit'] = r['incipit']
-        d['feast'] = r['feast']
-        d['office'] = r['office']
-        d['genre'] = r['genre']
-        d['position'] = r['position']
+        d['folio'] = ps
+        d['content structure'] = _s(rec.get('content_structure'))
+        d['sequence'] = seq
+        d['incipit'] = _s(rec.get('incipit'))
+        d['feast'] = _s(rec.get('feast'))
+        d['office'] = _s(rec.get('office'))
+        d['genre'] = _s(rec.get('genre'))
+        d['position'] = _s(rec.get('position'))
+        d['cantus_id'] = cid
         d['fulltext_standardized'] = std
-        d['fulltext_ms'] = r['fulltext_ms']
-        d['extra'] = ' | '.join(x for x in (r['rubric'], r['extra_note']) if x)
+        d['fulltext_ms'] = _s(rec.get('fulltext_ms'))
+        d['extra'] = _s(rec.get('rubric'))
         d['indexing_notes'] = '; '.join(notes)
         out.append(d)
-    return out
+    return out, problems
 
 def write_csv(path, cols, rows, enc='utf-8-sig'):
     with open(path, 'w', newline='', encoding=enc) as fh:
@@ -1330,7 +1306,6 @@ def main(argv=None):
     ap.add_argument('--seq-start', type=int, default=1)
     ap.add_argument('--start-heading', default='INCIPIT PROPRIUM DE SANCTIS')
     ap.add_argument('--end-heading', default='IN UIGILIA BEATI THOME APOSTOLI')
-    ap.add_argument('--ci-export', default=None, help='optional Cantus Index export (CSV) for CID PROPOSALS')
     ap.add_argument('--include-prayers', action='store_true', help='also put Cap/Or/Co/Sec/Pc rows in the import CSV')
     ap.add_argument('--json', action='store_true', help='also dump master rows as JSON')
     a = ap.parse_args(argv)
@@ -1359,13 +1334,11 @@ def main(argv=None):
     p = Parser(blocks, notes, leaf_info, (start, end), cfg)
     rows = p.run()
     rows = postprocess(rows, cfg, leaf_info)
-    if a.ci_export:
-        propose_cids(rows, load_ci(a.ci_export))
 
     os.makedirs(a.outdir, exist_ok=True)
-    imp = import_rows(rows, cfg)
-    write_csv(os.path.join(a.outdir, 'import.csv'), IMPORT_COLS, imp, enc='utf-8')
     mrows = [OrderedDict((c, r[c]) for c in MASTER_COLS) for r in rows]
+    imp, _problems = import_rows_from_master(mrows, cfg)
+    write_csv(os.path.join(a.outdir, 'import.csv'), IMPORT_COLS, imp, enc='utf-8')
     write_csv(os.path.join(a.outdir, 'master.csv'), MASTER_COLS, mrows)
     voc = std_vocab(rows)
     with open(os.path.join(a.outdir, 'std_vocab.json'), 'w', encoding='utf-8') as fh:
